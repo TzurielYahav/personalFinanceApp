@@ -25,8 +25,11 @@ def merge_finance_tables(folder_path='.'):
             # 4. Filter out footer rows (sums, legal text) by keeping only rows with a valid date format (DD.MM.YY)
             df = df[df['תאריך רכישה'].astype(str).str.contains(r'\d{2}\.\d{2}\.\d{2}', na=False, regex=True)]
             
-            # 5. Optional: Add a column to track which file the transaction originally came from
+            # 5. Track which file the transaction originally came from
             df['Source_File'] = os.path.basename(file)
+            
+            # 6. Add Card Number column, using an apostrophe to force Excel to treat it as text
+            df['מספר כרטיס'] = "'0210"
             
             all_data.append(df)
             print(f"Successfully processed: {os.path.basename(file)}")
@@ -34,11 +37,11 @@ def merge_finance_tables(folder_path='.'):
         except Exception as e:
             print(f"Skipping {os.path.basename(file)} due to error: {e}")
 
-    # 6. Combine all the tables into one DataFrame
+    # 7. Combine all the tables into one DataFrame
     if all_data:
         merged_df = pd.concat(all_data, ignore_index=True)
         
-        # 7. Save the merged data to a new Excel file
+        # 8. Save the merged data to a new Excel file
         output_name = "Merged_Finance_Table.xlsx"
         merged_df.to_excel(output_name, index=False)
         print(f"\nSuccess! Merged {len(merged_df)} transactions from {len(all_data)} files into '{output_name}'.")

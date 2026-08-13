@@ -121,6 +121,8 @@ class FinanceRepository extends ChangeNotifier {
       if (tx.date.month == now.month && tx.date.year == now.year) {
         if (tx is BankTransactionModel && tx.income != null) {
           sum += tx.income!;
+        } else if (tx is CcTransactionModel && tx.amount != null && tx.amount! < 0) {
+          sum += tx.amount!.abs();
         }
       }
     }
@@ -134,7 +136,7 @@ class FinanceRepository extends ChangeNotifier {
       if (tx.date.month == now.month && tx.date.year == now.year) {
         if (tx is BankTransactionModel && tx.expense != null) {
           sum += tx.expense!;
-        } else if (tx is CcTransactionModel && tx.amount != null) {
+        } else if (tx is CcTransactionModel && tx.amount != null && tx.amount! > 0) {
           sum += tx.amount!;
         }
       }
@@ -291,7 +293,9 @@ class FinanceRepository extends ChangeNotifier {
       List<BankTransactionModel> newTransactions) async {
     final mappedTransactions = newTransactions.map((tx) {
       String? mappedId;
+      bool txIsExpense = tx.expense != null;
       for (var rule in _mappingRules) {
+        if (rule.isExpense != null && rule.isExpense != txIsExpense) continue;
         if (rule.isDescription) {
           if (tx.description.trim().toLowerCase() ==
               rule.rawString.toLowerCase()) {
@@ -351,7 +355,9 @@ class FinanceRepository extends ChangeNotifier {
       List<CcTransactionModel> newTransactions) async {
     final mappedTransactions = newTransactions.map((tx) {
       String? mappedId;
+      bool txIsExpense = (tx.amount ?? 0) >= 0;
       for (var rule in _mappingRules) {
+        if (rule.isExpense != null && rule.isExpense != txIsExpense) continue;
         if (rule.isDescription) {
           if (tx.businessName.trim().toLowerCase() ==
               rule.rawString.toLowerCase()) {
@@ -410,12 +416,13 @@ class FinanceRepository extends ChangeNotifier {
   }
 
   Future<void> assignCategoryToUnknown(
-      String rawString, bool isDescription, String appCategoryId) async {
+      String rawString, bool isDescription, String appCategoryId, {required bool isExpense}) async {
     final rule = CategoryMappingRule(
       id: _uuid.v4(),
       rawString: rawString,
       isDescription: isDescription,
       appCategoryId: appCategoryId,
+      isExpense: isExpense,
     );
 
     await DatabaseService.insertCategoryMappingRule(rule);
@@ -435,14 +442,20 @@ class FinanceRepository extends ChangeNotifier {
       }
 
       if (match && tx.appCategoryId == null) {
-        if (tx is BankTransactionModel) {
-          _transactions[i] = tx.copyWithAppCategory(appCategoryId);
-          await DatabaseService.updateTransactionAppCategory(
-              tx.id, appCategoryId, true);
-        } else if (tx is CcTransactionModel) {
-          _transactions[i] = tx.copyWithAppCategory(appCategoryId);
-          await DatabaseService.updateTransactionAppCategory(
-              tx.id, appCategoryId, false);
+        bool txIsExpense = false;
+        if (tx is BankTransactionModel) txIsExpense = tx.expense != null;
+        if (tx is CcTransactionModel) txIsExpense = (tx.amount ?? 0) >= 0;
+
+        if (txIsExpense == isExpense) {
+          if (tx is BankTransactionModel) {
+            _transactions[i] = tx.copyWithAppCategory(appCategoryId);
+            await DatabaseService.updateTransactionAppCategory(
+                tx.id, appCategoryId, true);
+          } else if (tx is CcTransactionModel) {
+            _transactions[i] = tx.copyWithAppCategory(appCategoryId);
+            await DatabaseService.updateTransactionAppCategory(
+                tx.id, appCategoryId, false);
+          }
         }
       }
     }

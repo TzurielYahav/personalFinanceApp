@@ -133,6 +133,7 @@ class FileImportService {
 
       List<BaseTransaction> parsedTransactions = [];
       const uuid = Uuid();
+      Map<String, int> occurrenceTracker = {};
 
       for (int i = headerRowIndex + 1; i < rows.length; i++) {
         final row = rows[i];
@@ -156,8 +157,11 @@ class FileImportService {
             double? balance = _getOptionalDouble(row, mapping['balance']);
 
             DateTime parsedDate = _parseDate(dateStr);
-            final uniqueString =
+            final baseUniqueString =
                 "${accountId}_${parsedDate.toIso8601String()}_${descStr}_${income}_$expense";
+            int count = occurrenceTracker[baseUniqueString] ?? 0;
+            occurrenceTracker[baseUniqueString] = count + 1;
+            final uniqueString = "${baseUniqueString}_$count";
             final deterministicId = uuid.v5(Namespace.url.value, uniqueString);
 
             parsedTransactions.add(BankTransactionModel(
@@ -191,8 +195,11 @@ class FileImportService {
             String? paymentMethod =
                 _getOptionalString(row, mapping['paymentMethod']);
 
-            final uniqueString =
+            final baseUniqueString =
                 "${accountId}_${parsedDate.toIso8601String()}_${bizStr}_$amount";
+            int count = occurrenceTracker[baseUniqueString] ?? 0;
+            occurrenceTracker[baseUniqueString] = count + 1;
+            final uniqueString = "${baseUniqueString}_$count";
             final deterministicId = uuid.v5(Namespace.url.value, uniqueString);
 
             parsedTransactions.add(CcTransactionModel(

@@ -8,6 +8,7 @@ import '../../core/models/category.dart';
 import '../../core/models/category_group.dart';
 import '../../core/theme/app_theme.dart';
 import 'package:uuid/uuid.dart';
+import 'package:intl/intl.dart' hide TextDirection;
 
 const List<IconData> _appIconChoices = [
   Icons.home_outlined,
@@ -114,7 +115,7 @@ class _UncategorizedTab extends StatelessWidget {
   const _UncategorizedTab();
 
   void _showMappingDialog(BuildContext context, FinanceRepository repo,
-      String rawString, bool isDescription) {
+      String rawString, bool isDescription, bool isExpense) {
     showDialog(
       context: context,
       builder: (ctx) {
@@ -132,7 +133,7 @@ class _UncategorizedTab extends StatelessWidget {
                   title: Text(cat.name),
                   onTap: () {
                     repo.assignCategoryToUnknown(
-                        rawString, isDescription, cat.id);
+                        rawString, isDescription, cat.id, isExpense: isExpense);
                     Navigator.pop(ctx);
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content: Text('Mapped to ${cat.name}!')),
@@ -170,45 +171,81 @@ class _UncategorizedTab extends StatelessWidget {
         // Grouping them by raw string is better UX, but let's just list them
         // and when one is mapped, all matching disappear automatically.
 
+        final currencyFormatter = NumberFormat.currency(
+          locale: 'he_IL',
+          symbol: '₪',
+          decimalDigits: 2,
+        );
+
         return ListView.builder(
           itemCount: txs.length,
           itemBuilder: (context, index) {
             final tx = txs[index];
             String rawCategory = tx.category ?? '';
-            String desc = '';
-            double amount = 0;
+            String title = 'Unknown';
+            double displayAmount = 0.0;
+            bool isExpense = false;
 
             if (tx is BankTransactionModel) {
-              desc = tx.description;
-              amount = tx.expense ?? tx.income ?? 0;
+              title = tx.description;
+              if (tx.expense != null) {
+                displayAmount = tx.expense!;
+                isExpense = true;
+              } else if (tx.income != null) {
+                displayAmount = tx.income!;
+                isExpense = false;
+              }
             } else if (tx is CcTransactionModel) {
-              desc = tx.businessName;
-              amount = tx.amount ?? 0;
+              title = tx.businessName;
+              displayAmount = tx.amount ?? 0.0;
+              isExpense = displayAmount >= 0;
             }
 
             bool isDescription = rawCategory.trim().isEmpty;
-            String rawString = isDescription ? desc : rawCategory;
+            String rawString = isDescription ? title : rawCategory;
 
-            final account =
-                repo.accounts.where((a) => a.id == tx.accountId).firstOrNull;
+            final account = repo.getAccountById(tx.accountId);
+            String sourceText = "Unknown";
+            if (tx is BankTransactionModel) {
+              sourceText = "Bank Account";
+            } else if (tx is CcTransactionModel) {
+              sourceText = tx.cardDigits ?? account?.name ?? "Credit Card";
+            }
+
+            String dateText = DateFormat("dd/MM/yyyy").format(tx.date);
+            String subtitleText = '$dateText • $sourceText';
+            if (rawCategory.isNotEmpty) {
+              subtitleText += ' • $rawCategory';
+            }
 
             return Card(
-              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              margin: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
               child: ListTile(
-                title: Text(rawString,
-                    style: const TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (!isDescription) Text('Description: $desc'),
-                    Text('Amount: ₪${amount.toStringAsFixed(2)}'),
-                    Text('Source: ${account?.name ?? 'Unknown'}'),
-                  ],
+                onTap: () =>
+                    _showMappingDialog(context, repo, rawString, isDescription, isExpense),
+                title: Text(
+                  title,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                      color: AppColors.textPrimary),
                 ),
-                trailing: ElevatedButton(
-                  onPressed: () => _showMappingDialog(
-                      context, repo, rawString, isDescription),
-                  child: const Text('Map Category'),
+                subtitle: Padding(
+                  padding: const EdgeInsets.only(top: 4.0),
+                  child: Text(
+                    subtitleText,
+                    style: const TextStyle(
+                        fontSize: 13, color: AppColors.textSecondary),
+                  ),
+                ),
+                trailing: Text(
+                  '${isExpense ? "-" : "+"}${currencyFormatter.format(displayAmount.abs())}',
+                  textDirection: TextDirection.ltr,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: isExpense ? AppColors.expenseRed : AppColors.primary,
+                  ),
                 ),
               ),
             );

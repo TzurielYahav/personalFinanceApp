@@ -3,12 +3,14 @@ class CategoryMappingRule {
   final String rawString;
   final bool isDescription;
   final String appCategoryId;
+  final bool? isExpense;
 
   CategoryMappingRule({
     required this.id,
     required this.rawString,
     required this.isDescription,
     required this.appCategoryId,
+    this.isExpense,
   });
 
   Map<String, dynamic> toMap() {
@@ -17,6 +19,7 @@ class CategoryMappingRule {
       'rawString': rawString,
       'isDescription': isDescription ? 1 : 0,
       'appCategoryId': appCategoryId,
+      'isExpense': isExpense == null ? null : (isExpense! ? 1 : 0),
     };
   }
 
@@ -26,6 +29,7 @@ class CategoryMappingRule {
       rawString: map['rawString'],
       isDescription: map['isDescription'] == 1,
       appCategoryId: map['appCategoryId'],
+      isExpense: map['isExpense'] == null ? null : (map['isExpense'] == 1),
     );
   }
 }

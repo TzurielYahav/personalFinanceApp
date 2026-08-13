@@ -40,7 +40,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 7,
+      version: 8,
       onCreate: (db, version) async {
         await _createTables(db);
       },
@@ -91,6 +91,9 @@ class DatabaseService {
         if (oldVersion < 7) {
           await db.execute('ALTER TABLE categories ADD COLUMN isExcludedFromAnalytics INTEGER DEFAULT 0');
         }
+        if (oldVersion < 8) {
+          await db.execute('ALTER TABLE category_mapping_rules ADD COLUMN isExpense INTEGER');
+        }
       },
     );
   }
@@ -130,7 +133,8 @@ class DatabaseService {
         id TEXT PRIMARY KEY,
         rawString TEXT NOT NULL,
         isDescription INTEGER NOT NULL,
-        appCategoryId TEXT NOT NULL
+        appCategoryId TEXT NOT NULL,
+        isExpense INTEGER
       )
     ''');
 

@@ -26,6 +26,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
   int _selectedYear = DateTime.now().year;
   bool _isGroupView = false;
   final Set<String> _expandedGroups = {};
+  int _touchedPieIndex = -1;
 
   @override
   void initState() {
@@ -190,12 +191,17 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
 
       double amount = 0.0;
       if (type == CategoryType.expense) {
-        if (tx is BankTransactionModel && tx.expense != null)
+        if (tx is BankTransactionModel && tx.expense != null) {
           amount = tx.expense!;
-        if (tx is CcTransactionModel && tx.amount != null) amount = tx.amount!;
+        } else if (tx is CcTransactionModel && tx.amount != null && tx.amount! >= 0) {
+          amount = tx.amount!;
+        }
       } else {
-        if (tx is BankTransactionModel && tx.income != null)
+        if (tx is BankTransactionModel && tx.income != null) {
           amount = tx.income!;
+        } else if (tx is CcTransactionModel && tx.amount != null && tx.amount! < 0) {
+          amount = -(tx.amount!);
+        }
       }
 
       if (amount > 0) {
@@ -224,6 +230,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
     }
     // Any completely unrecognized transactions (uncatTotal) remain uncatTotal.
 
+    final activeCategories = relevantCategories.where((c) => (categoryTotals[c] ?? 0.0) > 0).toList();
+    final activeStandaloneCategories = activeCategories.where((c) => c.groupId == null).toList();
+    final activeGroups = relevantGroups.where((g) => (groupTotals[g] ?? 0.0) > 0).toList();
+
     final double totalAmount =
         categoryTotals.values.fold(0.0, (sum, val) => sum + val) + uncatTotal;
 
@@ -248,83 +258,118 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
     }
 
     final List<PieChartSectionData> sections = [];
-    const double radius = 24.0;
+    const double normalRadius = 24.0;
+    const double touchedRadius = 34.0;
     const double badgeOffset = 2.3;
+
+    int sectionIndex = 0;
+    String touchedCategoryName = '';
+    double touchedCategoryAmount = 0.0;
 
     if (_isGroupView) {
       groupTotals.forEach((group, amount) {
         if (amount > 0) {
+          final isTouched = sectionIndex == _touchedPieIndex;
+          if (isTouched) {
+            touchedCategoryName = group.name;
+            touchedCategoryAmount = amount;
+          }
           sections.add(
             PieChartSectionData(
               color: group.color,
               value: amount,
               showTitle: false,
-              radius: radius,
+              radius: isTouched ? touchedRadius : normalRadius,
               badgeWidget: buildBadge(
                   group.iconData, group.color, amount / totalAmount * 100),
               badgePositionPercentageOffset: badgeOffset,
             ),
           );
+          sectionIndex++;
         }
       });
       for (var cat in standaloneCategories) {
         final amount = categoryTotals[cat] ?? 0.0;
         if (amount > 0) {
+          final isTouched = sectionIndex == _touchedPieIndex;
+          if (isTouched) {
+            touchedCategoryName = cat.name;
+            touchedCategoryAmount = amount;
+          }
           sections.add(
             PieChartSectionData(
               color: cat.color,
               value: amount,
               showTitle: false,
-              radius: radius,
+              radius: isTouched ? touchedRadius : normalRadius,
               badgeWidget: buildBadge(
                   cat.iconData, cat.color, amount / totalAmount * 100),
               badgePositionPercentageOffset: badgeOffset,
             ),
           );
+          sectionIndex++;
         }
       }
       final otherTotal = ungroupedTotal + uncatTotal;
       if (otherTotal > 0) {
+        final isTouched = sectionIndex == _touchedPieIndex;
+        if (isTouched) {
+            touchedCategoryName = 'Uncategorized';
+            touchedCategoryAmount = otherTotal;
+        }
         sections.add(
           PieChartSectionData(
             color: Colors.grey,
             value: otherTotal,
             showTitle: false,
-            radius: radius,
+            radius: isTouched ? touchedRadius : normalRadius,
             badgeWidget: buildBadge(
                 Icons.category, Colors.grey, otherTotal / totalAmount * 100),
             badgePositionPercentageOffset: badgeOffset,
           ),
         );
+        sectionIndex++;
       }
     } else {
       categoryTotals.forEach((cat, amount) {
         if (amount > 0) {
+          final isTouched = sectionIndex == _touchedPieIndex;
+          if (isTouched) {
+            touchedCategoryName = cat.name;
+            touchedCategoryAmount = amount;
+          }
           sections.add(
             PieChartSectionData(
               color: cat.color,
               value: amount,
               showTitle: false,
-              radius: radius,
+              radius: isTouched ? touchedRadius : normalRadius,
               badgeWidget: buildBadge(
                   cat.iconData, cat.color, amount / totalAmount * 100),
               badgePositionPercentageOffset: badgeOffset,
             ),
           );
+          sectionIndex++;
         }
       });
       if (uncatTotal > 0) {
+        final isTouched = sectionIndex == _touchedPieIndex;
+        if (isTouched) {
+            touchedCategoryName = 'Uncategorized';
+            touchedCategoryAmount = uncatTotal;
+        }
         sections.add(
           PieChartSectionData(
             color: Colors.grey,
             value: uncatTotal,
             showTitle: false,
-            radius: radius,
+            radius: isTouched ? touchedRadius : normalRadius,
             badgeWidget: buildBadge(
                 Icons.category, Colors.grey, uncatTotal / totalAmount * 100),
             badgePositionPercentageOffset: badgeOffset,
           ),
         );
+        sectionIndex++;
       }
     }
 
@@ -352,6 +397,20 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                 children: [
                   PieChart(
                     PieChartData(
+                      pieTouchData: PieTouchData(
+                        touchCallback: (FlTouchEvent event, pieTouchResponse) {
+                          setState(() {
+                            if (!event.isInterestedForInteractions ||
+                                pieTouchResponse == null ||
+                                pieTouchResponse.touchedSection == null) {
+                              _touchedPieIndex = -1;
+                              return;
+                            }
+                            _touchedPieIndex =
+                                pieTouchResponse.touchedSection!.touchedSectionIndex;
+                          });
+                        },
+                      ),
                       borderData: FlBorderData(show: false),
                       sectionsSpace: 6,
                       centerSpaceRadius: 110,
@@ -362,22 +421,28 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        type == CategoryType.income
-                            ? 'Total Income'
-                            : 'Total Expenses',
+                        _touchedPieIndex == -1
+                            ? (type == CategoryType.income
+                                ? 'Total Income'
+                                : 'Total Expenses')
+                            : touchedCategoryName,
                         style: const TextStyle(
                           fontSize: 14,
                           color: AppColors.textSecondary,
                         ),
+                        textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        currencyFormatter.format(totalAmount),
+                        currencyFormatter.format(_touchedPieIndex == -1
+                            ? totalAmount
+                            : touchedCategoryAmount),
                         style: const TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.bold,
                           color: AppColors.textPrimary,
                         ),
+                        textAlign: TextAlign.center,
                       ),
                     ],
                   ),
@@ -487,14 +552,14 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
             ListView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              itemCount: relevantGroups.length +
-                  standaloneCategories.length +
+              itemCount: activeGroups.length +
+                  activeStandaloneCategories.length +
                   ((uncatTotal + ungroupedTotal) > 0 ? 1 : 0),
               itemBuilder: (context, idx) {
-                if (idx < relevantGroups.length) {
-                  final group = relevantGroups[idx];
+                if (idx < activeGroups.length) {
+                  final group = activeGroups[idx];
                   final spent = groupTotals[group] ?? 0.0;
-                  final groupCategories = relevantCategories
+                  final groupCategories = activeCategories
                       .where((c) => c.groupId == group.id)
                       .toList();
                   final limit = groupCategories.fold(
@@ -547,8 +612,8 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                     ],
                   );
                 } else if (idx <
-                    relevantGroups.length + standaloneCategories.length) {
-                  final cat = standaloneCategories[idx - relevantGroups.length];
+                    activeGroups.length + activeStandaloneCategories.length) {
+                  final cat = activeStandaloneCategories[idx - activeGroups.length];
                   final spent = categoryTotals[cat] ?? 0.0;
                   final limit = cat.monthlyBudgetLimit ?? 500.0;
                   return _buildListItemCard(
@@ -580,9 +645,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
             ListView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              itemCount: relevantCategories.length + (uncatTotal > 0 ? 1 : 0),
+              itemCount: activeCategories.length + (uncatTotal > 0 ? 1 : 0),
               itemBuilder: (context, idx) {
-                if (idx == relevantCategories.length) {
+                if (idx == activeCategories.length) {
                   return _buildListItemCard(
                     type: type,
                     name: 'Uncategorized',
@@ -595,7 +660,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                   );
                 }
 
-                final cat = relevantCategories[idx];
+                final cat = activeCategories[idx];
                 final spent = categoryTotals[cat] ?? 0.0;
                 final limit = cat.monthlyBudgetLimit ?? 500.0;
                 return _buildListItemCard(
@@ -947,7 +1012,8 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
         if (tx.expense != null) expenseAmount = tx.expense!;
         if (tx.income != null) incomeAmount = tx.income!;
       } else if (tx is CcTransactionModel) {
-        if (tx.amount != null) expenseAmount = tx.amount!;
+        if (tx.amount != null && tx.amount! >= 0) expenseAmount = tx.amount!;
+        if (tx.amount != null && tx.amount! < 0) incomeAmount = -(tx.amount!);
       }
 
       if (cat != null) {

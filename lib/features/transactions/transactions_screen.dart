@@ -316,7 +316,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                         } else if (tx is CcTransactionModel) {
                           title = tx.businessName;
                           displayAmount = tx.amount ?? 0.0;
-                          isExpense = true;
+                          isExpense = displayAmount >= 0;
                           catName ??= tx.category;
                         }
 
