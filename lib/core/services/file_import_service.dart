@@ -82,15 +82,25 @@ class FileImportService {
       final savedMappingString = prefs.getString(prefKey);
       Map<String, int>? mapping;
 
+      final currentHeadersSignature = headers.join('|');
+
       if (savedMappingString != null) {
-        final savedData =
-            jsonDecode(savedMappingString) as Map<String, dynamic>;
-        bool isValid = true;
-        savedData.forEach((key, value) {
-          if (value is int && value >= headers.length) isValid = false;
-        });
-        if (isValid) {
-          mapping = savedData.map((k, v) => MapEntry(k, v as int));
+        try {
+          final savedData = jsonDecode(savedMappingString) as Map<String, dynamic>;
+          final savedHeaders = savedData['headers'] as String?;
+          final savedMapping = savedData['mapping'] as Map<String, dynamic>?;
+
+          if (savedHeaders == currentHeadersSignature && savedMapping != null) {
+            bool isValid = true;
+            savedMapping.forEach((key, value) {
+              if (value is int && value >= headers.length) isValid = false;
+            });
+            if (isValid) {
+              mapping = savedMapping.map((k, v) => MapEntry(k, v as int));
+            }
+          }
+        } catch (e) {
+          // Ignore invalid JSON from previous versions
         }
       }
 
@@ -113,7 +123,11 @@ class FileImportService {
         final bool shouldSave = dialogResult['save'] as bool;
 
         if (shouldSave) {
-          await prefs.setString(prefKey, jsonEncode(mapping));
+          final dataToSave = {
+            'headers': currentHeadersSignature,
+            'mapping': mapping,
+          };
+          await prefs.setString(prefKey, jsonEncode(dataToSave));
         }
       }
 

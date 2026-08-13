@@ -6,6 +6,9 @@ import '../../core/models/cc_transaction_model.dart';
 import '../../core/models/base_transaction.dart';
 import '../../core/repositories/finance_repository.dart';
 import '../../core/theme/app_theme.dart';
+import 'dart:io';
+import 'package:file_picker/file_picker.dart';
+import '../../core/services/database_service.dart';
 import '../../core/services/file_import_service.dart';
 
 class TransactionsScreen extends StatefulWidget {
@@ -45,6 +48,92 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _exportDatabase(BuildContext context) async {
+    try {
+      final dbPath = await DatabaseService.getDatabaseFilePath();
+      
+      final String? selectedDirectory = await FilePicker.platform.saveFile(
+        dialogTitle: 'Export Database',
+        fileName: 'finance_app_backup.db',
+        type: FileType.custom,
+        allowedExtensions: ['db', 'sqlite'],
+      );
+
+      if (selectedDirectory != null) {
+        await File(dbPath).copy(selectedDirectory);
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Database exported successfully:\n$selectedDirectory')),
+          );
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to export database: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _importDatabase(BuildContext context) async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        dialogTitle: 'Import Database',
+        type: FileType.custom,
+        allowedExtensions: ['db', 'sqlite'],
+      );
+
+      if (result != null && result.files.single.path != null) {
+        final sourcePath = result.files.single.path!;
+        
+        if (!context.mounted) return;
+        
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Overwrite Database?'),
+            content: const Text(
+                'This will replace all your current data with the imported database. This action cannot be undone.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () async {
+                  Navigator.pop(ctx);
+                  try {
+                    await DatabaseService.replaceDatabase(sourcePath);
+                    if (context.mounted) {
+                      await Provider.of<FinanceRepository>(context, listen: false).reloadAllData();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Database imported successfully.')),
+                      );
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Failed to import database: $e')),
+                      );
+                    }
+                  }
+                },
+                child: const Text('Import', style: TextStyle(color: Colors.red)),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to import database: $e')),
+        );
+      }
+    }
   }
 
   @override
@@ -108,6 +197,16 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
             style: TextStyle(color: Colors.white),
           ),
           actions: [
+            IconButton(
+              icon: const Icon(Icons.file_download, color: Colors.white),
+              tooltip: 'Import Database',
+              onPressed: () => _importDatabase(context),
+            ),
+            IconButton(
+              icon: const Icon(Icons.upload_file, color: Colors.white),
+              tooltip: 'Export Database',
+              onPressed: () => _exportDatabase(context),
+            ),
             IconButton(
               icon: const Icon(Icons.delete_forever, color: Colors.red),
               tooltip: 'Delete All Transactions',

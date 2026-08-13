@@ -22,9 +22,13 @@ class FinanceRepository extends ChangeNotifier {
     _loadInitialData();
   }
 
+  Future<void> reloadAllData() async {
+    await _loadInitialData();
+  }
+
   Future<void> _loadInitialData() async {
     _accounts = List.from(DatabaseService.defaultAccounts);
-    
+
     final savedGroups = await DatabaseService.getAllCategoryGroups();
     if (savedGroups.isEmpty) {
       _groups = List.from(DatabaseService.defaultCategoryGroups);
@@ -54,7 +58,8 @@ class FinanceRepository extends ChangeNotifier {
       _transactions = savedTxs;
       // Clean up orphaned categories if they exist (e.g. from previously deleted custom categories that weren't cleared in the db)
       for (int i = 0; i < _transactions.length; i++) {
-        if (_transactions[i].appCategoryId != null && getCategoryById(_transactions[i].appCategoryId!) == null) {
+        if (_transactions[i].appCategoryId != null &&
+            getCategoryById(_transactions[i].appCategoryId!) == null) {
           final tx = _transactions[i];
           if (tx is BankTransactionModel) {
             _transactions[i] = tx.copyWithAppCategory(null);
@@ -247,11 +252,13 @@ class FinanceRepository extends ChangeNotifier {
         if (_transactions[i] is BankTransactionModel) {
           _transactions[i] = (_transactions[i] as BankTransactionModel)
               .copyWithAppCategory(null);
-          DatabaseService.updateTransactionAppCategory(_transactions[i].id, null, true);
+          DatabaseService.updateTransactionAppCategory(
+              _transactions[i].id, null, true);
         } else if (_transactions[i] is CcTransactionModel) {
           _transactions[i] = (_transactions[i] as CcTransactionModel)
               .copyWithAppCategory(null);
-          DatabaseService.updateTransactionAppCategory(_transactions[i].id, null, false);
+          DatabaseService.updateTransactionAppCategory(
+              _transactions[i].id, null, false);
         }
       }
     }
@@ -261,17 +268,19 @@ class FinanceRepository extends ChangeNotifier {
   Future<void> clearAllCategoryMappings() async {
     _mappingRules.clear();
     DatabaseService.deleteAllCategoryMappingRules();
-    
+
     for (int i = 0; i < _transactions.length; i++) {
       if (_transactions[i].appCategoryId != null) {
         if (_transactions[i] is BankTransactionModel) {
           _transactions[i] = (_transactions[i] as BankTransactionModel)
               .copyWithAppCategory(null);
-          DatabaseService.updateTransactionAppCategory(_transactions[i].id, null, true);
+          DatabaseService.updateTransactionAppCategory(
+              _transactions[i].id, null, true);
         } else if (_transactions[i] is CcTransactionModel) {
           _transactions[i] = (_transactions[i] as CcTransactionModel)
               .copyWithAppCategory(null);
-          DatabaseService.updateTransactionAppCategory(_transactions[i].id, null, false);
+          DatabaseService.updateTransactionAppCategory(
+              _transactions[i].id, null, false);
         }
       }
     }

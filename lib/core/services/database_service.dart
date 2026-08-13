@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
@@ -16,6 +17,21 @@ class DatabaseService {
     if (_db != null) return _db!;
     _db = await _initDB();
     return _db!;
+  }
+
+  static Future<String> getDatabaseFilePath() async {
+    final dbPath = await getDatabasesPath();
+    return join(dbPath, 'finance_app.db');
+  }
+
+  static Future<void> replaceDatabase(String sourcePath) async {
+    if (_db != null) {
+      await _db!.close();
+      _db = null;
+    }
+    final path = await getDatabaseFilePath();
+    final sourceFile = File(sourcePath);
+    await sourceFile.copy(path);
   }
 
   static Future<Database> _initDB() async {
