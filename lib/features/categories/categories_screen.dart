@@ -6,68 +6,107 @@ import '../../core/models/bank_transaction_model.dart';
 import '../../core/models/cc_transaction_model.dart';
 import '../../core/models/category.dart';
 import '../../core/models/category_group.dart';
+import '../../core/theme/app_theme.dart';
 import 'package:uuid/uuid.dart';
+
+const List<IconData> _appIconChoices = [
+  Icons.home_outlined,
+  Icons.shopping_bag_outlined,
+  Icons.healing_outlined,
+  Icons.beach_access_outlined,
+  Icons.directions_car_outlined,
+  Icons.work_outline,
+  Icons.account_balance_outlined,
+  Icons.lunch_dining_outlined,
+  Icons.local_play_outlined,
+  Icons.family_restroom,
+  Icons.category_outlined,
+  Icons.attach_money,
+];
+
+const List<Color> _appColorChoices = [
+  Colors.purple,
+  Colors.pink,
+  Colors.red,
+  Colors.teal,
+  Colors.amber,
+  Colors.blue,
+  Colors.lightBlue,
+  Colors.orange,
+  Colors.deepPurple,
+  Colors.green,
+  Colors.blueGrey,
+];
 
 class CategoriesScreen extends StatelessWidget {
   const CategoriesScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 3,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Categories'),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.cleaning_services),
-              tooltip: 'Clear All Mappings',
-              onPressed: () {
-                showDialog(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    title: const Text('Clear all mappings?'),
-                    content: const Text(
-                        'This will un-map all categorized transactions. This cannot be undone.'),
-                    actions: [
-                      TextButton(
-                          onPressed: () => Navigator.pop(ctx),
-                          child: const Text('Cancel')),
-                      TextButton(
-                        onPressed: () {
-                          Provider.of<FinanceRepository>(context, listen: false)
-                              .clearAllCategoryMappings();
-                          Navigator.pop(ctx);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                  content: Text('All mappings cleared.')));
-                        },
-                        child: const Text('Clear',
-                            style: TextStyle(color: Colors.red)),
+    return Directionality(
+        textDirection: TextDirection.rtl,
+        child: DefaultTabController(
+          length: 3,
+          child: Scaffold(
+            appBar: AppBar(
+              backgroundColor: AppColors.accentPurple,
+              iconTheme: const IconThemeData(color: Colors.white),
+              title: const Text('Categories',
+                  style: TextStyle(color: Colors.white)),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.cleaning_services, color: Colors.red),
+                  tooltip: 'Clear All Mappings',
+                  onPressed: () {
+                    showDialog(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: const Text('Clear all mappings?'),
+                        content: const Text(
+                            'This will un-map all categorized transactions. This cannot be undone.'),
+                        actions: [
+                          TextButton(
+                              onPressed: () => Navigator.pop(ctx),
+                              child: const Text('Cancel')),
+                          TextButton(
+                            onPressed: () {
+                              Provider.of<FinanceRepository>(context,
+                                      listen: false)
+                                  .clearAllCategoryMappings();
+                              Navigator.pop(ctx);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                      content: Text('All mappings cleared.')));
+                            },
+                            child: const Text('Clear',
+                                style: TextStyle(color: Colors.red)),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                );
-              },
+                    );
+                  },
+                ),
+              ],
+              bottom: const TabBar(
+                labelColor: Colors.white,
+                unselectedLabelColor: Colors.white70,
+                indicatorColor: Colors.white,
+                tabs: [
+                  Tab(text: 'Uncategorized'),
+                  Tab(text: 'App Categories'),
+                  Tab(text: 'Groups'),
+                ],
+              ),
             ),
-          ],
-          bottom: const TabBar(
-            tabs: [
-              Tab(text: 'Uncategorized'),
-              Tab(text: 'App Categories'),
-              Tab(text: 'Groups'),
-            ],
+            body: const TabBarView(
+              children: [
+                _UncategorizedTab(),
+                _AppCategoriesTab(),
+                _GroupsTab(),
+              ],
+            ),
           ),
-        ),
-        body: const TabBarView(
-          children: [
-            _UncategorizedTab(),
-            _AppCategoriesTab(),
-            _GroupsTab(),
-          ],
-        ),
-      ),
-    );
+        ));
   }
 }
 
@@ -273,42 +312,16 @@ class _CategoryDialogState extends State<_CategoryDialog> {
   String? _groupId;
   late bool _isExcluded;
 
-  final List<IconData> _iconChoices = [
-    Icons.shopping_cart,
-    Icons.restaurant,
-    Icons.bolt,
-    Icons.directions_car,
-    Icons.devices,
-    Icons.attach_money,
-    Icons.work,
-    Icons.category,
-    Icons.receipt,
-    Icons.movie,
-    Icons.fitness_center,
-    Icons.medical_services,
-    Icons.flight,
-    Icons.school,
-    Icons.home,
-  ];
-
-  final List<Color> _colorChoices = [
-    Colors.red,
-    Colors.blue,
-    Colors.green,
-    Colors.orange,
-    Colors.purple,
-    Colors.teal,
-    Colors.pink,
-    Colors.amber,
-  ];
+  final List<IconData> _iconChoices = _appIconChoices;
+  final List<Color> _colorChoices = _appColorChoices;
 
   @override
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.category?.name ?? '');
     _type = widget.category?.type ?? CategoryType.expense;
-    _iconData = widget.category?.iconData ?? Icons.category;
-    _color = widget.category?.color ?? Colors.blue;
+    _iconData = widget.category?.iconData ?? _appIconChoices.first;
+    _color = widget.category?.color ?? _appColorChoices.first;
     _groupId = widget.category?.groupId;
     _isExcluded = widget.category?.isExcludedFromAnalytics ?? false;
   }
@@ -399,7 +412,8 @@ class _CategoryDialogState extends State<_CategoryDialog> {
             const SizedBox(height: 16),
             SwitchListTile(
               title: const Text('Exclude from Analytics'),
-              subtitle: const Text('Hide transactions for this category in the Analytics tab.'),
+              subtitle: const Text(
+                  'Hide transactions for this category in the Analytics tab.'),
               value: _isExcluded,
               onChanged: (val) => setState(() => _isExcluded = val),
               contentPadding: EdgeInsets.zero,
@@ -457,15 +471,17 @@ class _GroupsTab extends StatelessWidget {
             itemCount: repo.groups.length,
             itemBuilder: (context, index) {
               final group = repo.groups[index];
-              final groupCategories = repo.categories.where((c) => c.groupId == group.id).toList();
-              
+              final groupCategories =
+                  repo.categories.where((c) => c.groupId == group.id).toList();
+
               return Card(
                 margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: Column(
                   children: [
                     ListTile(
                       leading: Icon(group.iconData, color: group.color),
-                      title: Text(group.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                      title: Text(group.name,
+                          style: const TextStyle(fontWeight: FontWeight.bold)),
                       subtitle: Text(group.type.name.toUpperCase()),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -511,11 +527,14 @@ class _GroupsTab extends StatelessWidget {
                     ),
                     if (groupCategories.isNotEmpty) const Divider(height: 1),
                     ...groupCategories.map((cat) => ListTile(
-                          contentPadding: const EdgeInsets.only(left: 72, right: 16),
-                          leading: Icon(cat.iconData, color: cat.color, size: 20),
+                          contentPadding:
+                              const EdgeInsets.only(left: 72, right: 16),
+                          leading:
+                              Icon(cat.iconData, color: cat.color, size: 20),
                           title: Text(cat.name),
                           trailing: IconButton(
-                            icon: const Icon(Icons.remove_circle_outline, color: Colors.grey),
+                            icon: const Icon(Icons.remove_circle_outline,
+                                color: Colors.grey),
                             tooltip: 'Remove from group',
                             onPressed: () {
                               repo.updateCategory(Category(
@@ -566,38 +585,16 @@ class _GroupDialogState extends State<_GroupDialog> {
   late IconData _iconData;
   late Color _color;
 
-  final List<IconData> _iconChoices = [
-    Icons.home,
-    Icons.restaurant,
-    Icons.bolt,
-    Icons.directions_car,
-    Icons.shopping_cart,
-    Icons.attach_money,
-    Icons.work,
-    Icons.category,
-    Icons.business,
-    Icons.health_and_safety,
-    Icons.airplanemode_active,
-  ];
-
-  final List<Color> _colorChoices = [
-    Colors.red,
-    Colors.blue,
-    Colors.green,
-    Colors.orange,
-    Colors.purple,
-    Colors.teal,
-    Colors.pink,
-    Colors.amber,
-  ];
+  final List<IconData> _iconChoices = _appIconChoices;
+  final List<Color> _colorChoices = _appColorChoices;
 
   @override
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.group?.name ?? '');
     _type = widget.group?.type ?? CategoryType.expense;
-    _iconData = widget.group?.iconData ?? Icons.home;
-    _color = widget.group?.color ?? Colors.blue;
+    _iconData = widget.group?.iconData ?? _appIconChoices.first;
+    _color = widget.group?.color ?? _appColorChoices.first;
   }
 
   @override

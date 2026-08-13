@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
-import 'package:intl/intl.dart';
+import 'package:intl/intl.dart' hide TextDirection;
 import '../../core/models/bank_transaction_model.dart';
 import '../../core/models/cc_transaction_model.dart';
 import '../../core/models/category.dart';
@@ -23,6 +23,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
   late TabController _monthlyTabController;
 
   DateTime _selectedMonth = DateTime(DateTime.now().year, DateTime.now().month);
+  int _selectedYear = DateTime.now().year;
   bool _isGroupView = false;
   final Set<String> _expandedGroups = {};
 
@@ -52,25 +53,46 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
     });
   }
 
+  void _previousYear() {
+    setState(() {
+      _selectedYear--;
+    });
+  }
+
+  void _nextYear() {
+    setState(() {
+      _selectedYear++;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Financial Analytics'),
-        bottom: TabBar(
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        appBar: AppBar(
+          backgroundColor: AppColors.accentPurple,
+          iconTheme: const IconThemeData(color: Colors.white),
+          title: const Text('Financial Analytics',
+              style: TextStyle(color: Colors.white)),
+          bottom: TabBar(
+            controller: _mainTabController,
+            labelColor: Colors.white,
+            unselectedLabelColor: Colors.white70,
+            indicatorColor: Colors.white,
+            tabs: const [
+              Tab(text: 'Monthly'),
+              Tab(text: 'Annually'),
+            ],
+          ),
+        ),
+        body: TabBarView(
           controller: _mainTabController,
-          tabs: const [
-            Tab(text: 'Monthly'),
-            Tab(text: 'Annually'),
+          children: [
+            _buildMonthlyView(context),
+            _buildAnnuallyView(context),
           ],
         ),
-      ),
-      body: TabBarView(
-        controller: _mainTabController,
-        children: [
-          _buildMonthlyView(context),
-          const Center(child: Text('Annually View (Coming Soon)')),
-        ],
       ),
     );
   }
@@ -79,40 +101,39 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
     return Column(
       children: [
         // Month Selector
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.chevron_left),
-                onPressed: _previousMonth,
-              ),
-              Text(
-                DateFormat('MMMM yyyy').format(_selectedMonth),
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
+        GestureDetector(
+          onHorizontalDragEnd: (details) {
+            if (details.primaryVelocity! > 0) {
+              _previousMonth();
+            } else if (details.primaryVelocity! < 0) {
+              _nextMonth();
+            }
+          },
+          child: Padding(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.chevron_left),
+                  onPressed: _nextMonth,
                 ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.chevron_right),
-                onPressed: _nextMonth,
-              ),
-            ],
+                Text(
+                  DateFormat('MMMM yyyy').format(_selectedMonth),
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.chevron_right),
+                  onPressed: _previousMonth,
+                ),
+              ],
+            ),
           ),
-        ),
-        // Income / Expenses Tabs
-        TabBar(
-          controller: _monthlyTabController,
-          labelColor: AppColors.textPrimary,
-          unselectedLabelColor: AppColors.textSecondary,
-          indicatorColor: AppColors.accentBlue,
-          tabs: const [
-            Tab(text: 'Income'),
-            Tab(text: 'Expenses'),
-          ],
         ),
         // Tab Content
         Expanded(
@@ -212,7 +233,23 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
     final progress =
         totalBudget > 0 ? (totalAmount / totalBudget).clamp(0.0, 1.0) : 0.0;
 
+    Widget buildBadge(IconData icon, Color color, double percentage) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 20),
+          Text('${percentage.round()}%',
+              style: const TextStyle(
+                  fontSize: 12.0,
+                  color: AppColors.textSecondary,
+                  fontWeight: FontWeight.bold)),
+        ],
+      );
+    }
+
     final List<PieChartSectionData> sections = [];
+    const double radius = 24.0;
+    const double badgeOffset = 2.3;
 
     if (_isGroupView) {
       groupTotals.forEach((group, amount) {
@@ -221,12 +258,11 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
             PieChartSectionData(
               color: group.color,
               value: amount,
-              title: '${(amount / totalAmount * 100).toStringAsFixed(1)}%',
-              radius: 50.0,
-              titleStyle: const TextStyle(
-                  fontSize: 12.0,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white),
+              showTitle: false,
+              radius: radius,
+              badgeWidget: buildBadge(
+                  group.iconData, group.color, amount / totalAmount * 100),
+              badgePositionPercentageOffset: badgeOffset,
             ),
           );
         }
@@ -238,12 +274,11 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
             PieChartSectionData(
               color: cat.color,
               value: amount,
-              title: '${(amount / totalAmount * 100).toStringAsFixed(1)}%',
-              radius: 50.0,
-              titleStyle: const TextStyle(
-                  fontSize: 12.0,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white),
+              showTitle: false,
+              radius: radius,
+              badgeWidget: buildBadge(
+                  cat.iconData, cat.color, amount / totalAmount * 100),
+              badgePositionPercentageOffset: badgeOffset,
             ),
           );
         }
@@ -254,12 +289,11 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
           PieChartSectionData(
             color: Colors.grey,
             value: otherTotal,
-            title: '${(otherTotal / totalAmount * 100).toStringAsFixed(1)}%',
-            radius: 50.0,
-            titleStyle: const TextStyle(
-                fontSize: 12.0,
-                fontWeight: FontWeight.bold,
-                color: Colors.white),
+            showTitle: false,
+            radius: radius,
+            badgeWidget: buildBadge(
+                Icons.category, Colors.grey, otherTotal / totalAmount * 100),
+            badgePositionPercentageOffset: badgeOffset,
           ),
         );
       }
@@ -270,12 +304,11 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
             PieChartSectionData(
               color: cat.color,
               value: amount,
-              title: '${(amount / totalAmount * 100).toStringAsFixed(1)}%',
-              radius: 50.0,
-              titleStyle: const TextStyle(
-                  fontSize: 12.0,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white),
+              showTitle: false,
+              radius: radius,
+              badgeWidget: buildBadge(
+                  cat.iconData, cat.color, amount / totalAmount * 100),
+              badgePositionPercentageOffset: badgeOffset,
             ),
           );
         }
@@ -285,12 +318,11 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
           PieChartSectionData(
             color: Colors.grey,
             value: uncatTotal,
-            title: '${(uncatTotal / totalAmount * 100).toStringAsFixed(1)}%',
-            radius: 50.0,
-            titleStyle: const TextStyle(
-                fontSize: 12.0,
-                fontWeight: FontWeight.bold,
-                color: Colors.white),
+            showTitle: false,
+            radius: radius,
+            badgeWidget: buildBadge(
+                Icons.category, Colors.grey, uncatTotal / totalAmount * 100),
+            badgePositionPercentageOffset: badgeOffset,
           ),
         );
       }
@@ -299,19 +331,57 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          Text(
+            type == CategoryType.income ? 'Income' : 'Expenses',
+            textAlign: TextAlign.start,
+            style: const TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 32),
           // Pie Chart
           if (totalAmount > 0)
             SizedBox(
-              height: 200,
-              child: PieChart(
-                PieChartData(
-                  borderData: FlBorderData(show: false),
-                  sectionsSpace: 3,
-                  centerSpaceRadius: 40,
-                  sections: sections,
-                ),
+              height: 340,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  PieChart(
+                    PieChartData(
+                      borderData: FlBorderData(show: false),
+                      sectionsSpace: 6,
+                      centerSpaceRadius: 110,
+                      sections: sections,
+                    ),
+                  ),
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        type == CategoryType.income
+                            ? 'Total Income'
+                            : 'Total Expenses',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        currencyFormatter.format(totalAmount),
+                        style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             )
           else
@@ -358,20 +428,12 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
             ],
           ),
           const SizedBox(height: 4),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: progress,
-              minHeight: 12,
-              backgroundColor: AppColors.surfaceLight,
-              valueColor: AlwaysStoppedAnimation<Color>(
-                type == CategoryType.expense
-                    ? (progress > 0.9
-                        ? AppColors.expenseRed
-                        : AppColors.accentBlue)
-                    : AppColors.primary,
-              ),
-            ),
+          _buildGradientProgressBar(
+            progress,
+            type == CategoryType.expense
+                ? (progress > 0.9 ? AppColors.expenseRed : AppColors.accentBlue)
+                : AppColors.primary,
+            height: 12,
           ),
 
           const SizedBox(height: 24),
@@ -398,6 +460,24 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                     _isGroupView = newSelection.first;
                   });
                 },
+                style: ButtonStyle(
+                  backgroundColor: WidgetStateProperty.resolveWith<Color>(
+                    (Set<WidgetState> states) {
+                      if (states.contains(WidgetState.selected)) {
+                        return AppColors.primary;
+                      }
+                      return Colors.transparent;
+                    },
+                  ),
+                  foregroundColor: WidgetStateProperty.resolveWith<Color>(
+                    (Set<WidgetState> states) {
+                      if (states.contains(WidgetState.selected)) {
+                        return Colors.white;
+                      }
+                      return AppColors.primary;
+                    },
+                  ),
+                ),
               ),
             ],
           ),
@@ -425,6 +505,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                   return Column(
                     children: [
                       _buildGroupItemCard(
+                        type: type,
                         name: group.name,
                         icon: group.iconData,
                         color: group.color,
@@ -450,6 +531,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                               final catSpent = categoryTotals[cat] ?? 0.0;
                               final catLimit = cat.monthlyBudgetLimit ?? 500.0;
                               return _buildListItemCard(
+                                type: type,
                                 name: cat.name,
                                 icon: cat.iconData,
                                 color: cat.color,
@@ -470,6 +552,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                   final spent = categoryTotals[cat] ?? 0.0;
                   final limit = cat.monthlyBudgetLimit ?? 500.0;
                   return _buildListItemCard(
+                    type: type,
                     name: cat.name,
                     icon: cat.iconData,
                     color: cat.color,
@@ -481,6 +564,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                   );
                 } else {
                   return _buildListItemCard(
+                    type: type,
                     name: 'Uncategorized',
                     icon: Icons.category,
                     color: Colors.grey,
@@ -500,6 +584,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
               itemBuilder: (context, idx) {
                 if (idx == relevantCategories.length) {
                   return _buildListItemCard(
+                    type: type,
                     name: 'Uncategorized',
                     icon: Icons.category,
                     color: Colors.grey,
@@ -514,6 +599,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                 final spent = categoryTotals[cat] ?? 0.0;
                 final limit = cat.monthlyBudgetLimit ?? 500.0;
                 return _buildListItemCard(
+                  type: type,
                   name: cat.name,
                   icon: cat.iconData,
                   color: cat.color,
@@ -671,19 +757,22 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
   }
 
   Widget _buildGroupItemCard({
+    required CategoryType type,
     required String name,
     required IconData icon,
     required Color color,
     required double spent,
     required double limit,
     required NumberFormat currencyFormatter,
-    required VoidCallback onTap,
     required bool isExpanded,
+    required VoidCallback onTap,
   }) {
     final progress =
         limit > 0 ? (spent / limit).clamp(0.0, 1.0) : (spent > 0 ? 1.0 : 0.0);
-    final isOverBudget = progress > 0.9;
-    final progressColor = isOverBudget ? AppColors.expenseRed : color;
+    final isFull = progress > 0.9;
+    final progressColor = type == CategoryType.expense
+        ? (isFull ? AppColors.expenseRed : color)
+        : (isFull ? AppColors.primary : color);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
@@ -692,56 +781,38 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.all(14.0),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SizedBox(
-                width: 44,
-                height: 44,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    SizedBox(
-                      width: 44,
-                      height: 44,
-                      child: CircularProgressIndicator(
-                        value: progress,
-                        backgroundColor: AppColors.surfaceLight,
-                        valueColor:
-                            AlwaysStoppedAnimation<Color>(progressColor),
-                        strokeWidth: 3,
-                      ),
-                    ),
-                    Icon(icon, color: color, size: 22),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
+              Row(
+                children: [
+                  Icon(icon, color: color, size: 24),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
                       name,
                       style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           color: AppColors.textPrimary,
                           fontSize: 16),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${currencyFormatter.format(spent)} / ${limit > 0 ? currencyFormatter.format(limit) : 'No limit'}',
-                      style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textSecondary),
-                    ),
-                  ],
-                ),
+                  ),
+                  Text(
+                    '${currencyFormatter.format(spent)} / ${limit > 0 ? currencyFormatter.format(limit) : 'No limit'}',
+                    style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textSecondary),
+                  ),
+                  const SizedBox(width: 8),
+                  Icon(
+                    isExpanded ? Icons.expand_less : Icons.expand_more,
+                    color: AppColors.textSecondary,
+                  ),
+                ],
               ),
-              Icon(
-                isExpanded ? Icons.expand_less : Icons.expand_more,
-                color: AppColors.textSecondary,
-              ),
+              const SizedBox(height: 12),
+              _buildGradientProgressBar(progress, progressColor),
             ],
           ),
         ),
@@ -750,6 +821,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
   }
 
   Widget _buildListItemCard({
+    required CategoryType type,
     required String name,
     required IconData icon,
     required Color color,
@@ -791,22 +863,348 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
-              ClipRRect(
+              const SizedBox(height: 12),
+              _buildGradientProgressBar(
+                  progress,
+                  type == CategoryType.expense
+                      ? (progress > 0.9 ? AppColors.expenseRed : color)
+                      : (progress > 0.9 ? AppColors.primary : color)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGradientProgressBar(double progress, Color color,
+      {double height = 8}) {
+    return Container(
+      height: height,
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: AppColors.surfaceLight,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: Container(
+              width: constraints.maxWidth * progress,
+              decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(4),
-                child: LinearProgressIndicator(
-                  value: progress,
-                  minHeight: 8,
-                  backgroundColor: AppColors.surfaceLight,
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    progress > 0.9 ? AppColors.expenseRed : color,
+                gradient: LinearGradient(
+                  colors: [
+                    color.withOpacity(0.75),
+                    color,
+                  ],
+                  begin: AlignmentDirectional.centerStart,
+                  end: AlignmentDirectional.centerEnd,
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildAnnuallyView(BuildContext context) {
+    final repo = Provider.of<FinanceRepository>(context);
+    final currencyFormatter =
+        NumberFormat.currency(symbol: '₪', decimalDigits: 0);
+
+    // Group transactions by month
+    final Map<int, double> monthlyIncome = {};
+    final Map<int, double> monthlyExpense = {};
+
+    for (int i = 1; i <= 12; i++) {
+      monthlyIncome[i] = 0.0;
+      monthlyExpense[i] = 0.0;
+    }
+
+    final List<BaseTransaction> yearTransactions =
+        repo.transactions.where((tx) => tx.date.year == _selectedYear).toList();
+
+    for (var tx in yearTransactions) {
+      Category? cat;
+      if (tx.appCategoryId != null) {
+        cat = repo.getCategoryById(tx.appCategoryId!);
+      } else if (tx.category != null) {
+        cat = repo.categories
+            .where((c) => c.name.toLowerCase() == tx.category!.toLowerCase())
+            .firstOrNull;
+      }
+
+      if (cat != null && cat.isExcludedFromAnalytics) continue;
+
+      final month = tx.date.month;
+
+      double expenseAmount = 0.0;
+      double incomeAmount = 0.0;
+
+      if (tx is BankTransactionModel) {
+        if (tx.expense != null) expenseAmount = tx.expense!;
+        if (tx.income != null) incomeAmount = tx.income!;
+      } else if (tx is CcTransactionModel) {
+        if (tx.amount != null) expenseAmount = tx.amount!;
+      }
+
+      if (cat != null) {
+        if (cat.type == CategoryType.expense) {
+          monthlyExpense[month] =
+              (monthlyExpense[month] ?? 0.0) + expenseAmount;
+        } else {
+          monthlyIncome[month] = (monthlyIncome[month] ?? 0.0) + incomeAmount;
+        }
+      } else {
+        // Uncategorized
+        if (expenseAmount > 0)
+          monthlyExpense[month] =
+              (monthlyExpense[month] ?? 0.0) + expenseAmount;
+        if (incomeAmount > 0)
+          monthlyIncome[month] = (monthlyIncome[month] ?? 0.0) + incomeAmount;
+      }
+    }
+
+    final double totalIncome = monthlyIncome.values.fold(0.0, (a, b) => a + b);
+    final double totalExpense =
+        monthlyExpense.values.fold(0.0, (a, b) => a + b);
+    final double maxAmount = [...monthlyIncome.values, ...monthlyExpense.values]
+        .fold(0.0, (max, val) => val > max ? val : max);
+
+    // Calculate Y axis interval
+    final double yInterval =
+        maxAmount > 0 ? (maxAmount / 4).ceilToDouble() : 1000.0;
+
+    return Column(
+      children: [
+        // Year Selector
+        GestureDetector(
+          onHorizontalDragEnd: (details) {
+            if (details.primaryVelocity! > 0) {
+              _previousYear();
+            } else if (details.primaryVelocity! < 0) {
+              _nextYear();
+            }
+          },
+          child: Padding(
+            padding:
+                const EdgeInsets.symmetric(vertical: 16.0, horizontal: 24.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.chevron_left,
+                      color: AppColors.textPrimary),
+                  onPressed: () =>
+                      _nextYear(), // Right arrow for older year in RTL
+                ),
+                Text(
+                  '$_selectedYear',
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.chevron_right,
+                      color: AppColors.textPrimary),
+                  onPressed: () =>
+                      _previousYear(), // Left arrow for newer year in RTL
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        // Summary Cards
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          child: Row(
+            children: [
+              Expanded(
+                child: Card(
+                  color: AppColors.primary.withOpacity(0.1),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Total Income',
+                            style: TextStyle(
+                                color: AppColors.primary,
+                                fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 8),
+                        Text(
+                          currencyFormatter.format(totalIncome),
+                          style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.textPrimary),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Card(
+                  color: AppColors.expenseRed.withOpacity(0.1),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Total Expenses',
+                            style: TextStyle(
+                                color: AppColors.expenseRed,
+                                fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 8),
+                        Text(
+                          currencyFormatter.format(totalExpense),
+                          style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.textPrimary),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
             ],
           ),
         ),
-      ),
+        const SizedBox(height: 24),
+
+        // Bar Chart
+        Expanded(
+          child: Padding(
+            padding:
+                const EdgeInsets.only(right: 16.0, left: 16.0, bottom: 24.0),
+            child: BarChart(
+              BarChartData(
+                alignment: BarChartAlignment.spaceAround,
+                maxY: maxAmount * 1.1,
+                barTouchData: BarTouchData(
+                  enabled: true,
+                  touchTooltipData: BarTouchTooltipData(
+                    getTooltipColor: (group) => Colors.black87,
+                    getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                      final isIncome = rodIndex == 0;
+                      return BarTooltipItem(
+                        '${isIncome ? "Income" : "Expense"}\n${currencyFormatter.format(rod.toY)}',
+                        TextStyle(
+                          color: isIncome
+                              ? AppColors.primary
+                              : AppColors.expenseRed,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                titlesData: FlTitlesData(
+                  show: true,
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      getTitlesWidget: (value, meta) {
+                        const style = TextStyle(
+                          color: AppColors.textSecondary,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 10,
+                        );
+                        final months = [
+                          'Jan',
+                          'Feb',
+                          'Mar',
+                          'Apr',
+                          'May',
+                          'Jun',
+                          'Jul',
+                          'Aug',
+                          'Sep',
+                          'Oct',
+                          'Nov',
+                          'Dec'
+                        ];
+                        final index = value.toInt() - 1;
+                        if (index < 0 || index > 11)
+                          return const SizedBox.shrink();
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 8.0),
+                          child: Text(months[index], style: style),
+                        );
+                      },
+                      reservedSize: 28,
+                    ),
+                  ),
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 46,
+                      interval: yInterval > 0 ? yInterval : 1000,
+                      getTitlesWidget: (value, meta) {
+                        if (value == 0) return const SizedBox.shrink();
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 8.0),
+                          child: Text(
+                            currencyFormatter.format(value),
+                            style: const TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 10,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  topTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false)),
+                ),
+                gridData: FlGridData(
+                  show: true,
+                  drawVerticalLine: false,
+                  horizontalInterval: yInterval > 0 ? yInterval : 1000,
+                  getDrawingHorizontalLine: (value) => FlLine(
+                    color: Colors.grey.withOpacity(0.2),
+                    strokeWidth: 1,
+                  ),
+                ),
+                borderData: FlBorderData(show: false),
+                barGroups: List.generate(12, (index) {
+                  final month = index + 1;
+                  return BarChartGroupData(
+                    x: month,
+                    barRods: [
+                      BarChartRodData(
+                        toY: monthlyIncome[month] ?? 0.0,
+                        color: AppColors.primary,
+                        width: 8,
+                        borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(4)),
+                      ),
+                      BarChartRodData(
+                        toY: monthlyExpense[month] ?? 0.0,
+                        color: AppColors.expenseRed,
+                        width: 8,
+                        borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(4)),
+                      ),
+                    ],
+                  );
+                }),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

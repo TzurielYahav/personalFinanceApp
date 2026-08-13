@@ -109,7 +109,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
           ),
           actions: [
             IconButton(
-              icon: const Icon(Icons.delete_forever, color: Colors.white),
+              icon: const Icon(Icons.delete_forever, color: Colors.red),
               tooltip: 'Delete All Transactions',
               onPressed: () => _confirmDeleteAll(context),
             ),
@@ -336,7 +336,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
           ],
           child: const FloatingActionButton(
             onPressed: null,
-            backgroundColor: AppColors.accentPurple,
+            backgroundColor: AppColors.primary,
             child: Icon(Icons.upload_file, color: Colors.white),
           ),
         ),

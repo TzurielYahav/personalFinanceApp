@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:provider/provider.dart';
 import 'core/repositories/finance_repository.dart';
 import 'core/theme/app_theme.dart';
@@ -28,6 +29,9 @@ class PersonalFinanceApp extends StatelessWidget {
         title: 'Personal Finance Tracker',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,
+        scrollBehavior: const MaterialScrollBehavior().copyWith(
+          dragDevices: {PointerDeviceKind.mouse, PointerDeviceKind.touch, PointerDeviceKind.stylus, PointerDeviceKind.trackpad},
+        ),
         home: const MainNavigationWrapper(),
       ),
     );
