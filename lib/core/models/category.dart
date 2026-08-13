@@ -12,6 +12,8 @@ class Category {
   final IconData iconData;
   final Color color;
   final double? monthlyBudgetLimit;
+  final String? groupId;
+  final bool isExcludedFromAnalytics;
 
   Category({
     required this.id,
@@ -20,6 +22,8 @@ class Category {
     required this.iconData,
     required this.color,
     this.monthlyBudgetLimit,
+    this.groupId,
+    this.isExcludedFromAnalytics = false,
   });
 
   Map<String, dynamic> toJson() {
@@ -30,6 +34,8 @@ class Category {
       'iconCode': iconData.codePoint,
       'color': color.value,
       'monthlyBudgetLimit': monthlyBudgetLimit,
+      'groupId': groupId,
+      'isExcludedFromAnalytics': isExcludedFromAnalytics ? 1 : 0,
     };
   }
 
@@ -41,15 +47,17 @@ class Category {
         (e) => e.name == json['type'],
         orElse: () => CategoryType.expense,
       ),
-      iconData: _getIconFromCode(json['iconCode'] as int?),
+      iconData: getIconFromCode(json['iconCode'] as int?),
       color: Color(json['color'] as int),
       monthlyBudgetLimit: json['monthlyBudgetLimit'] != null
           ? (json['monthlyBudgetLimit'] as num).toDouble()
           : null,
+      groupId: json['groupId'],
+      isExcludedFromAnalytics: json['isExcludedFromAnalytics'] == 1,
     );
   }
 
-  static IconData _getIconFromCode(int? code) {
+  static IconData getIconFromCode(int? code) {
     if (code == null) return Icons.category;
     return _iconMap[code] ?? Icons.category;
   }

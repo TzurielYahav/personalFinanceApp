@@ -13,7 +13,7 @@ class DashboardScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final currencyFormatter =
-        NumberFormat.currency(symbol: '\$', decimalDigits: 2);
+        NumberFormat.currency(symbol: '₪', decimalDigits: 2);
     final repo = Provider.of<FinanceRepository>(context);
 
     return Scaffold(
@@ -231,7 +231,7 @@ class DashboardScreen extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           Text(
-                            '${isExpense ? '-' : '+'}${currencyFormatter.format(displayAmount)}',
+                            '${isExpense ? '-' : '+'}${currencyFormatter.format(displayAmount.abs())}',
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 15,

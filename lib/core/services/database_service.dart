@@ -7,6 +7,7 @@ import '../models/base_transaction.dart';
 import '../models/bank_transaction_model.dart';
 import '../models/cc_transaction_model.dart';
 import '../models/category_mapping_rule.dart';
+import '../models/category_group.dart';
 
 class DatabaseService {
   static Database? _db;
@@ -23,7 +24,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 4,
+      version: 7,
       onCreate: (db, version) async {
         await _createTables(db);
       },
@@ -46,6 +47,33 @@ class DatabaseService {
               appCategoryId TEXT NOT NULL
             )
           ''');
+        }
+        if (oldVersion < 5) {
+          await db.execute('''
+            CREATE TABLE categories (
+              id TEXT PRIMARY KEY,
+              name TEXT NOT NULL,
+              type TEXT NOT NULL,
+              iconCode INTEGER NOT NULL,
+              color INTEGER NOT NULL,
+              monthlyBudgetLimit REAL
+            )
+          ''');
+        }
+        if (oldVersion < 6) {
+          await db.execute('''
+            CREATE TABLE category_groups (
+              id TEXT PRIMARY KEY,
+              name TEXT NOT NULL,
+              type TEXT NOT NULL,
+              iconCode INTEGER NOT NULL,
+              color INTEGER NOT NULL
+            )
+          ''');
+          await db.execute('ALTER TABLE categories ADD COLUMN groupId TEXT');
+        }
+        if (oldVersion < 7) {
+          await db.execute('ALTER TABLE categories ADD COLUMN isExcludedFromAnalytics INTEGER DEFAULT 0');
         }
       },
     );
@@ -87,6 +115,29 @@ class DatabaseService {
         rawString TEXT NOT NULL,
         isDescription INTEGER NOT NULL,
         appCategoryId TEXT NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE categories (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL,
+        iconCode INTEGER NOT NULL,
+        color INTEGER NOT NULL,
+        monthlyBudgetLimit REAL,
+        groupId TEXT,
+        isExcludedFromAnalytics INTEGER DEFAULT 0
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE category_groups (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL,
+        iconCode INTEGER NOT NULL,
+        color INTEGER NOT NULL
       )
     ''');
   }
@@ -184,8 +235,18 @@ class DatabaseService {
     );
   }
 
+  static Future<void> deleteCategoryMappingRuleByCategoryId(String categoryId) async {
+    final db = await database;
+    await db.delete('category_mapping_rules', where: 'appCategoryId = ?', whereArgs: [categoryId]);
+  }
+
+  static Future<void> deleteAllCategoryMappingRules() async {
+    final db = await database;
+    await db.delete('category_mapping_rules');
+  }
+
   static Future<void> updateTransactionAppCategory(
-      String txId, String appCategoryId, bool isBank) async {
+      String txId, String? appCategoryId, bool isBank) async {
     final db = await database;
     final table = isBank ? 'bank_transactions' : 'cc_transactions';
     await db.update(
@@ -194,6 +255,72 @@ class DatabaseService {
       where: 'id = ?',
       whereArgs: [txId],
     );
+  }
+
+  static Future<List<CategoryGroup>> getAllCategoryGroups() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query('category_groups');
+    return maps.map((map) => CategoryGroup.fromJson(map)).toList();
+  }
+
+  static Future<void> insertCategoryGroup(CategoryGroup group) async {
+    final db = await database;
+    await db.insert(
+      'category_groups',
+      group.toJson(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  static Future<void> deleteCategoryGroup(String id) async {
+    final db = await database;
+    await db.delete('category_groups', where: 'id = ?', whereArgs: [id]);
+  }
+
+  static Future<List<Category>> getAllCategories() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query('categories');
+    return maps.map((map) => Category.fromJson(map)).toList();
+  }
+
+  static Future<void> insertCategory(Category category) async {
+    final db = await database;
+    await db.insert(
+      'categories',
+      category.toJson(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  static Future<void> deleteCategory(String id) async {
+    final db = await database;
+    await db.delete('categories', where: 'id = ?', whereArgs: [id]);
+  }
+
+  static List<CategoryGroup> get defaultCategoryGroups {
+    return [
+      CategoryGroup(
+        id: 'group_living',
+        name: 'Living',
+        type: CategoryType.expense,
+        iconData: Icons.home,
+        color: const Color(0xFF3B82F6),
+      ),
+      CategoryGroup(
+        id: 'group_food',
+        name: 'Food & Dining',
+        type: CategoryType.expense,
+        iconData: Icons.restaurant,
+        color: const Color(0xFFF59E0B),
+      ),
+      CategoryGroup(
+        id: 'group_income',
+        name: 'Income',
+        type: CategoryType.income,
+        iconData: Icons.attach_money,
+        color: const Color(0xFF10B981),
+      ),
+    ];
   }
 
   // Keep these defaults to prevent breaking the rest of the app for now
@@ -206,6 +333,7 @@ class DatabaseService {
         iconData: Icons.shopping_cart,
         color: const Color(0xFF10B981),
         monthlyBudgetLimit: 600.0,
+        groupId: 'group_food',
       ),
       Category(
         id: 'cat_dining',
@@ -214,6 +342,7 @@ class DatabaseService {
         iconData: Icons.restaurant,
         color: const Color(0xFFF59E0B),
         monthlyBudgetLimit: 350.0,
+        groupId: 'group_food',
       ),
       Category(
         id: 'cat_bills',
@@ -222,6 +351,7 @@ class DatabaseService {
         iconData: Icons.bolt,
         color: const Color(0xFFEF4444),
         monthlyBudgetLimit: 500.0,
+        groupId: 'group_living',
       ),
       Category(
         id: 'cat_transport',
@@ -245,6 +375,7 @@ class DatabaseService {
         type: CategoryType.income,
         iconData: Icons.attach_money,
         color: const Color(0xFF10B981),
+        groupId: 'group_income',
       ),
       Category(
         id: 'cat_freelance',
@@ -252,6 +383,7 @@ class DatabaseService {
         type: CategoryType.income,
         iconData: Icons.work,
         color: const Color(0xFF06B6D4),
+        groupId: 'group_income',
       ),
       Category(
         id: 'cat_uncategorized',
@@ -270,7 +402,7 @@ class DatabaseService {
         name: 'Primary Checking',
         type: AccountType.checking,
         balance: 4250.80,
-        currency: '\$',
+        currency: '₪',
         accountNumberMasked: '•••• 4821',
         institutionName: 'Chase Bank',
         themeColor: const Color(0xFF3B82F6),
@@ -281,7 +413,7 @@ class DatabaseService {
         name: 'Sapphire Preferred',
         type: AccountType.creditCard,
         balance: 840.50,
-        currency: '\$',
+        currency: '₪',
         accountNumberMasked: '•••• 9104',
         institutionName: 'Chase Card',
         themeColor: const Color(0xFF8B5CF6),
@@ -292,7 +424,7 @@ class DatabaseService {
         name: 'Cash Wallet',
         type: AccountType.cash,
         balance: 185.00,
-        currency: '\$',
+        currency: '₪',
         institutionName: 'Physical Cash',
         themeColor: const Color(0xFF10B981),
         iconData: Icons.payments,
@@ -302,7 +434,7 @@ class DatabaseService {
         name: 'High Yield Savings',
         type: AccountType.savings,
         balance: 12500.00,
-        currency: '\$',
+        currency: '₪',
         accountNumberMasked: '•••• 1120',
         institutionName: 'Marcus Savings',
         themeColor: const Color(0xFF06B6D4),

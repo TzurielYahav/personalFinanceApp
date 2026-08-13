@@ -5,7 +5,6 @@ import 'package:provider/provider.dart';
 import 'core/repositories/finance_repository.dart';
 import 'core/theme/app_theme.dart';
 import 'features/dashboard/dashboard_screen.dart';
-import 'features/accounts/accounts_screen.dart';
 import 'features/transactions/transactions_screen.dart';
 import 'features/categories/categories_screen.dart';
 import 'features/analytics/analytics_screen.dart';
@@ -28,7 +27,7 @@ class PersonalFinanceApp extends StatelessWidget {
       child: MaterialApp(
         title: 'Personal Finance Tracker',
         debugShowCheckedModeBanner: false,
-        theme: AppTheme.darkTheme,
+        theme: AppTheme.lightTheme,
         home: const MainNavigationWrapper(),
       ),
     );
@@ -47,7 +46,6 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
 
   final List<Widget> _screens = const [
     DashboardScreen(),
-    AccountsScreen(),
     TransactionsScreen(),
     CategoriesScreen(),
     AnalyticsScreen(),
@@ -69,11 +67,6 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
             icon: Icon(Icons.dashboard_outlined),
             activeIcon: Icon(Icons.dashboard),
             label: 'Dashboard',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.account_balance_wallet_outlined),
-            activeIcon: Icon(Icons.account_balance_wallet),
-            label: 'Accounts',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.receipt_long_outlined),

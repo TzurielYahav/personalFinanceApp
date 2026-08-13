@@ -6,11 +6,13 @@ import '../models/base_transaction.dart';
 import '../models/bank_transaction_model.dart';
 import '../models/cc_transaction_model.dart';
 import '../models/category_mapping_rule.dart';
+import '../models/category_group.dart';
 import '../services/database_service.dart';
 
 class FinanceRepository extends ChangeNotifier {
   List<Account> _accounts = [];
   List<Category> _categories = [];
+  List<CategoryGroup> _groups = [];
   List<BaseTransaction> _transactions = [];
   List<CategoryMappingRule> _mappingRules = [];
 
@@ -22,7 +24,27 @@ class FinanceRepository extends ChangeNotifier {
 
   Future<void> _loadInitialData() async {
     _accounts = List.from(DatabaseService.defaultAccounts);
-    _categories = List.from(DatabaseService.defaultCategories);
+    
+    final savedGroups = await DatabaseService.getAllCategoryGroups();
+    if (savedGroups.isEmpty) {
+      _groups = List.from(DatabaseService.defaultCategoryGroups);
+      for (var group in _groups) {
+        await DatabaseService.insertCategoryGroup(group);
+      }
+    } else {
+      _groups = savedGroups;
+    }
+
+    final savedCategories = await DatabaseService.getAllCategories();
+    if (savedCategories.isEmpty) {
+      _categories = List.from(DatabaseService.defaultCategories);
+      for (var cat in _categories) {
+        await DatabaseService.insertCategory(cat);
+      }
+    } else {
+      _categories = savedCategories;
+    }
+
     _mappingRules = await DatabaseService.getCategoryMappingRules();
 
     final savedTxs = await DatabaseService.getAllTransactions();
@@ -30,6 +52,19 @@ class FinanceRepository extends ChangeNotifier {
       _transactions = List.from(DatabaseService.defaultTransactions);
     } else {
       _transactions = savedTxs;
+      // Clean up orphaned categories if they exist (e.g. from previously deleted custom categories that weren't cleared in the db)
+      for (int i = 0; i < _transactions.length; i++) {
+        if (_transactions[i].appCategoryId != null && getCategoryById(_transactions[i].appCategoryId!) == null) {
+          final tx = _transactions[i];
+          if (tx is BankTransactionModel) {
+            _transactions[i] = tx.copyWithAppCategory(null);
+            DatabaseService.updateTransactionAppCategory(tx.id, null, true);
+          } else if (tx is CcTransactionModel) {
+            _transactions[i] = tx.copyWithAppCategory(null);
+            DatabaseService.updateTransactionAppCategory(tx.id, null, false);
+          }
+        }
+      }
     }
 
     notifyListeners();
@@ -38,6 +73,7 @@ class FinanceRepository extends ChangeNotifier {
   // Getters
   List<Account> get accounts => List.unmodifiable(_accounts);
   List<Category> get categories => List.unmodifiable(_categories);
+  List<CategoryGroup> get groups => List.unmodifiable(_groups);
   List<BaseTransaction> get transactions => List.unmodifiable(_transactions);
   List<CategoryMappingRule> get mappingRules =>
       List.unmodifiable(_mappingRules);
@@ -146,6 +182,7 @@ class FinanceRepository extends ChangeNotifier {
 
   void addCategory(Category category) {
     _categories.add(category);
+    DatabaseService.insertCategory(category);
     notifyListeners();
   }
 
@@ -153,15 +190,56 @@ class FinanceRepository extends ChangeNotifier {
     final index = _categories.indexWhere((c) => c.id == updatedCategory.id);
     if (index != -1) {
       _categories[index] = updatedCategory;
+      DatabaseService.insertCategory(updatedCategory);
       notifyListeners();
     }
   }
 
+  void addCategoryGroup(CategoryGroup group) {
+    _groups.add(group);
+    DatabaseService.insertCategoryGroup(group);
+    notifyListeners();
+  }
+
+  void updateCategoryGroup(CategoryGroup updatedGroup) {
+    final index = _groups.indexWhere((g) => g.id == updatedGroup.id);
+    if (index != -1) {
+      _groups[index] = updatedGroup;
+      DatabaseService.insertCategoryGroup(updatedGroup);
+      notifyListeners();
+    }
+  }
+
+  void deleteCategoryGroup(String id) {
+    _groups.removeWhere((g) => g.id == id);
+    DatabaseService.deleteCategoryGroup(id);
+
+    for (int i = 0; i < _categories.length; i++) {
+      if (_categories[i].groupId == id) {
+        final cat = _categories[i];
+        final updatedCat = Category(
+          id: cat.id,
+          name: cat.name,
+          type: cat.type,
+          iconData: cat.iconData,
+          color: cat.color,
+          monthlyBudgetLimit: cat.monthlyBudgetLimit,
+          groupId: null,
+        );
+        _categories[i] = updatedCat;
+        DatabaseService.insertCategory(updatedCat);
+      }
+    }
+    notifyListeners();
+  }
+
   void deleteCategory(String id) {
     _categories.removeWhere((c) => c.id == id);
+    DatabaseService.deleteCategory(id);
 
     // Un-map any rules using this category
     _mappingRules.removeWhere((rule) => rule.appCategoryId == id);
+    DatabaseService.deleteCategoryMappingRuleByCategoryId(id);
 
     // Remove from existing transactions
     for (int i = 0; i < _transactions.length; i++) {
@@ -169,9 +247,11 @@ class FinanceRepository extends ChangeNotifier {
         if (_transactions[i] is BankTransactionModel) {
           _transactions[i] = (_transactions[i] as BankTransactionModel)
               .copyWithAppCategory(null);
+          DatabaseService.updateTransactionAppCategory(_transactions[i].id, null, true);
         } else if (_transactions[i] is CcTransactionModel) {
           _transactions[i] = (_transactions[i] as CcTransactionModel)
               .copyWithAppCategory(null);
+          DatabaseService.updateTransactionAppCategory(_transactions[i].id, null, false);
         }
       }
     }
@@ -180,16 +260,18 @@ class FinanceRepository extends ChangeNotifier {
 
   Future<void> clearAllCategoryMappings() async {
     _mappingRules.clear();
-    // Assuming we'd want to also clear it from DatabaseService if supported,
-    // but the user said memory is ok for now.
+    DatabaseService.deleteAllCategoryMappingRules();
+    
     for (int i = 0; i < _transactions.length; i++) {
       if (_transactions[i].appCategoryId != null) {
         if (_transactions[i] is BankTransactionModel) {
           _transactions[i] = (_transactions[i] as BankTransactionModel)
               .copyWithAppCategory(null);
+          DatabaseService.updateTransactionAppCategory(_transactions[i].id, null, true);
         } else if (_transactions[i] is CcTransactionModel) {
           _transactions[i] = (_transactions[i] as CcTransactionModel)
               .copyWithAppCategory(null);
+          DatabaseService.updateTransactionAppCategory(_transactions[i].id, null, false);
         }
       }
     }

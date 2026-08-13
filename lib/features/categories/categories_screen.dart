@@ -5,6 +5,7 @@ import '../../core/models/base_transaction.dart';
 import '../../core/models/bank_transaction_model.dart';
 import '../../core/models/cc_transaction_model.dart';
 import '../../core/models/category.dart';
+import '../../core/models/category_group.dart';
 import 'package:uuid/uuid.dart';
 
 class CategoriesScreen extends StatelessWidget {
@@ -13,7 +14,7 @@ class CategoriesScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Categories'),
@@ -54,6 +55,7 @@ class CategoriesScreen extends StatelessWidget {
             tabs: [
               Tab(text: 'Uncategorized'),
               Tab(text: 'App Categories'),
+              Tab(text: 'Groups'),
             ],
           ),
         ),
@@ -61,6 +63,7 @@ class CategoriesScreen extends StatelessWidget {
           children: [
             _UncategorizedTab(),
             _AppCategoriesTab(),
+            _GroupsTab(),
           ],
         ),
       ),
@@ -159,7 +162,7 @@ class _UncategorizedTab extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     if (!isDescription) Text('Description: $desc'),
-                    Text('Amount: \$${amount.toStringAsFixed(2)}'),
+                    Text('Amount: ₪${amount.toStringAsFixed(2)}'),
                     Text('Source: ${account?.name ?? 'Unknown'}'),
                   ],
                 ),
@@ -190,10 +193,7 @@ class _AppCategoriesTab extends StatelessWidget {
             itemBuilder: (context, index) {
               final cat = repo.categories[index];
               return ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: cat.color.withValues(alpha: 0.2),
-                  child: Icon(cat.iconData, color: cat.color),
-                ),
+                leading: Icon(cat.iconData, color: cat.color),
                 title: Text(cat.name),
                 subtitle: Text(cat.type.name.toUpperCase()),
                 trailing: Row(
@@ -270,6 +270,8 @@ class _CategoryDialogState extends State<_CategoryDialog> {
   late CategoryType _type;
   late IconData _iconData;
   late Color _color;
+  String? _groupId;
+  late bool _isExcluded;
 
   final List<IconData> _iconChoices = [
     Icons.shopping_cart,
@@ -307,6 +309,8 @@ class _CategoryDialogState extends State<_CategoryDialog> {
     _type = widget.category?.type ?? CategoryType.expense;
     _iconData = widget.category?.iconData ?? Icons.category;
     _color = widget.category?.color ?? Colors.blue;
+    _groupId = widget.category?.groupId;
+    _isExcluded = widget.category?.isExcludedFromAnalytics ?? false;
   }
 
   @override
@@ -321,6 +325,293 @@ class _CategoryDialogState extends State<_CategoryDialog> {
             TextField(
               controller: _nameController,
               decoration: const InputDecoration(labelText: 'Category Name'),
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<CategoryType>(
+              value: _type,
+              items: CategoryType.values
+                  .map((t) => DropdownMenuItem(
+                        value: t,
+                        child: Text(t.name.toUpperCase()),
+                      ))
+                  .toList(),
+              onChanged: (val) => setState(() => _type = val!),
+              decoration: const InputDecoration(labelText: 'Type'),
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<String?>(
+              value: _groupId,
+              items: [
+                const DropdownMenuItem(value: null, child: Text('No Group')),
+                ...widget.repo.groups.map((g) => DropdownMenuItem(
+                      value: g.id,
+                      child: Text(g.name),
+                    ))
+              ],
+              onChanged: (val) => setState(() => _groupId = val),
+              decoration: const InputDecoration(labelText: 'Group'),
+            ),
+            const SizedBox(height: 16),
+            const Text('Icon', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _iconChoices
+                  .map((i) => ChoiceChip(
+                        showCheckmark: false,
+                        label: Icon(i,
+                            color:
+                                _iconData == i ? Colors.white : Colors.black),
+                        selectedColor: Theme.of(context).primaryColor,
+                        selected: _iconData == i,
+                        onSelected: (sel) {
+                          if (sel) setState(() => _iconData = i);
+                        },
+                      ))
+                  .toList(),
+            ),
+            const SizedBox(height: 16),
+            const Text('Color', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _colorChoices
+                  .map((c) => GestureDetector(
+                        onTap: () => setState(() => _color = c),
+                        child: Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: c,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                                color: _color == c
+                                    ? Colors.black
+                                    : Colors.transparent,
+                                width: 3),
+                          ),
+                        ),
+                      ))
+                  .toList(),
+            ),
+            const SizedBox(height: 16),
+            SwitchListTile(
+              title: const Text('Exclude from Analytics'),
+              subtitle: const Text('Hide transactions for this category in the Analytics tab.'),
+              value: _isExcluded,
+              onChanged: (val) => setState(() => _isExcluded = val),
+              contentPadding: EdgeInsets.zero,
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel')),
+        ElevatedButton(
+          onPressed: () {
+            if (_nameController.text.trim().isEmpty) return;
+            if (widget.category == null) {
+              widget.repo.addCategory(Category(
+                id: const Uuid().v4(),
+                name: _nameController.text.trim(),
+                type: _type,
+                iconData: _iconData,
+                color: _color,
+                groupId: _groupId,
+                isExcludedFromAnalytics: _isExcluded,
+              ));
+            } else {
+              widget.repo.updateCategory(Category(
+                id: widget.category!.id,
+                name: _nameController.text.trim(),
+                type: _type,
+                iconData: _iconData,
+                color: _color,
+                monthlyBudgetLimit: widget.category!.monthlyBudgetLimit,
+                groupId: _groupId,
+                isExcludedFromAnalytics: _isExcluded,
+              ));
+            }
+            Navigator.pop(context);
+          },
+          child: const Text('Save'),
+        ),
+      ],
+    );
+  }
+}
+
+class _GroupsTab extends StatelessWidget {
+  const _GroupsTab();
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<FinanceRepository>(
+      builder: (context, repo, child) {
+        return Scaffold(
+          body: ListView.builder(
+            itemCount: repo.groups.length,
+            itemBuilder: (context, index) {
+              final group = repo.groups[index];
+              final groupCategories = repo.categories.where((c) => c.groupId == group.id).toList();
+              
+              return Card(
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Column(
+                  children: [
+                    ListTile(
+                      leading: Icon(group.iconData, color: group.color),
+                      title: Text(group.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: Text(group.type.name.toUpperCase()),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.edit),
+                            onPressed: () {
+                              showDialog(
+                                context: context,
+                                builder: (ctx) =>
+                                    _GroupDialog(repo: repo, group: group),
+                              );
+                            },
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete, color: Colors.red),
+                            onPressed: () {
+                              showDialog(
+                                context: context,
+                                builder: (ctx) => AlertDialog(
+                                  title: const Text('Delete Group?'),
+                                  content: Text(
+                                      'Are you sure you want to delete ${group.name}? Categories inside this group will become ungrouped.'),
+                                  actions: [
+                                    TextButton(
+                                        onPressed: () => Navigator.pop(ctx),
+                                        child: const Text('Cancel')),
+                                    TextButton(
+                                      onPressed: () {
+                                        repo.deleteCategoryGroup(group.id);
+                                        Navigator.pop(ctx);
+                                      },
+                                      child: const Text('Delete',
+                                          style: TextStyle(color: Colors.red)),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (groupCategories.isNotEmpty) const Divider(height: 1),
+                    ...groupCategories.map((cat) => ListTile(
+                          contentPadding: const EdgeInsets.only(left: 72, right: 16),
+                          leading: Icon(cat.iconData, color: cat.color, size: 20),
+                          title: Text(cat.name),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.remove_circle_outline, color: Colors.grey),
+                            tooltip: 'Remove from group',
+                            onPressed: () {
+                              repo.updateCategory(Category(
+                                id: cat.id,
+                                name: cat.name,
+                                type: cat.type,
+                                iconData: cat.iconData,
+                                color: cat.color,
+                                monthlyBudgetLimit: cat.monthlyBudgetLimit,
+                                groupId: null,
+                              ));
+                            },
+                          ),
+                        )),
+                  ],
+                ),
+              );
+            },
+          ),
+          floatingActionButton: FloatingActionButton(
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (ctx) => _GroupDialog(repo: repo),
+              );
+            },
+            child: const Icon(Icons.add),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _GroupDialog extends StatefulWidget {
+  final CategoryGroup? group;
+  final FinanceRepository repo;
+
+  const _GroupDialog({this.group, required this.repo});
+
+  @override
+  State<_GroupDialog> createState() => _GroupDialogState();
+}
+
+class _GroupDialogState extends State<_GroupDialog> {
+  late TextEditingController _nameController;
+  late CategoryType _type;
+  late IconData _iconData;
+  late Color _color;
+
+  final List<IconData> _iconChoices = [
+    Icons.home,
+    Icons.restaurant,
+    Icons.bolt,
+    Icons.directions_car,
+    Icons.shopping_cart,
+    Icons.attach_money,
+    Icons.work,
+    Icons.category,
+    Icons.business,
+    Icons.health_and_safety,
+    Icons.airplanemode_active,
+  ];
+
+  final List<Color> _colorChoices = [
+    Colors.red,
+    Colors.blue,
+    Colors.green,
+    Colors.orange,
+    Colors.purple,
+    Colors.teal,
+    Colors.pink,
+    Colors.amber,
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.group?.name ?? '');
+    _type = widget.group?.type ?? CategoryType.expense;
+    _iconData = widget.group?.iconData ?? Icons.home;
+    _color = widget.group?.color ?? Colors.blue;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.group == null ? 'New Group' : 'Edit Group'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: _nameController,
+              decoration: const InputDecoration(labelText: 'Group Name'),
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<CategoryType>(
@@ -389,8 +680,8 @@ class _CategoryDialogState extends State<_CategoryDialog> {
         ElevatedButton(
           onPressed: () {
             if (_nameController.text.trim().isEmpty) return;
-            if (widget.category == null) {
-              widget.repo.addCategory(Category(
+            if (widget.group == null) {
+              widget.repo.addCategoryGroup(CategoryGroup(
                 id: const Uuid().v4(),
                 name: _nameController.text.trim(),
                 type: _type,
@@ -398,13 +689,12 @@ class _CategoryDialogState extends State<_CategoryDialog> {
                 color: _color,
               ));
             } else {
-              widget.repo.updateCategory(Category(
-                id: widget.category!.id,
+              widget.repo.updateCategoryGroup(CategoryGroup(
+                id: widget.group!.id,
                 name: _nameController.text.trim(),
                 type: _type,
                 iconData: _iconData,
                 color: _color,
-                monthlyBudgetLimit: widget.category!.monthlyBudgetLimit,
               ));
             }
             Navigator.pop(context);

@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:intl/intl.dart';
+import 'package:intl/intl.dart' hide TextDirection;
 import '../../core/models/bank_transaction_model.dart';
 import '../../core/models/cc_transaction_model.dart';
+import '../../core/models/base_transaction.dart';
 import '../../core/repositories/finance_repository.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/services/file_import_service.dart';
@@ -50,7 +51,14 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   Widget build(BuildContext context) {
     final repo = Provider.of<FinanceRepository>(context);
     final currencyFormatter =
-        NumberFormat.currency(symbol: '\$', decimalDigits: 2);
+        NumberFormat.currency(symbol: '₪', decimalDigits: 2);
+
+    final uniqueCards = repo.transactions
+        .whereType<CcTransactionModel>()
+        .map((tx) => tx.cardDigits)
+        .where((digits) => digits != null && digits.isNotEmpty)
+        .toSet()
+        .toList();
 
     final filteredTransactions = repo.transactions.where((tx) {
       String desc = '';
@@ -60,10 +68,16 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
       final matchesQuery =
           _searchQuery.isEmpty || desc.contains(_searchQuery.toLowerCase());
 
-      if (_filterType == 'BANK')
+      if (_filterType == 'BANK') {
         return matchesQuery && tx is BankTransactionModel;
-      if (_filterType == 'CREDIT_CARD')
-        return matchesQuery && tx is CcTransactionModel;
+      }
+
+      if (_filterType.startsWith('CC_')) {
+        final digits = _filterType.substring(3);
+        return matchesQuery &&
+            tx is CcTransactionModel &&
+            tx.cardDigits == digits;
+      }
 
       return matchesQuery;
     }).toList();
@@ -71,254 +85,261 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     // Sort descending by date of transaction
     filteredTransactions.sort((a, b) => b.date.compareTo(a.date));
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Transaction History'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.delete_forever, color: Colors.redAccent),
-            tooltip: 'Delete All Transactions',
-            onPressed: () => _confirmDeleteAll(context),
+    // Create list with monthly dividers
+    final items = <dynamic>[];
+    String? lastMonthYear;
+    for (var tx in filteredTransactions) {
+      final monthYear = DateFormat('MMMM yyyy').format(tx.date);
+      if (monthYear != lastMonthYear) {
+        items.add(monthYear);
+        lastMonthYear = monthYear;
+      }
+      items.add(tx);
+    }
+
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        appBar: AppBar(
+          backgroundColor: AppColors.accentPurple,
+          iconTheme: const IconThemeData(color: Colors.white),
+          title: const Text(
+            'Transaction History',
+            style: TextStyle(color: Colors.white),
           ),
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.upload_file, color: AppColors.primary),
-            onSelected: (value) async {
-              final isBank = value == 'bank';
-              // Ideally we'd show an account picker here, but for now we default
-              // to the first account of the matching type, or let the user choose.
-              // To keep it simple, we'll pick a matching account.
-              final matchingAccount = repo.accounts.firstWhere(
-                (acc) => isBank ? !acc.isDebt : acc.isDebt,
-                orElse: () => repo.accounts.first,
-              );
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.delete_forever, color: Colors.white),
+              tooltip: 'Delete All Transactions',
+              onPressed: () => _confirmDeleteAll(context),
+            ),
+          ],
+        ),
+        body: Column(
+          children: [
+            Container(
+              color: AppColors.accentPurple,
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+              child: TextField(
+                decoration: const InputDecoration(
+                  hintText: 'Search transactions by description...',
+                  prefixIcon:
+                      Icon(Icons.search, color: AppColors.textSecondary),
+                ),
+                onChanged: (val) => setState(() => _searchQuery = val),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(
+                  left: 16.0, right: 16.0, top: 12.0, bottom: 8.0),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _filterChip('ALL', 'All Activity'),
+                    const SizedBox(width: 8),
+                    _filterChip('BANK', 'Bank Accounts'),
+                    for (var digits in uniqueCards) ...[
+                      const SizedBox(width: 8),
+                      _filterChip('CC_$digits', 'Card *$digits'),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            Expanded(
+              child: items.isEmpty
+                  ? const Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.search_off,
+                              size: 48, color: AppColors.textSecondary),
+                          SizedBox(height: 12),
+                          Text(
+                            'No transactions found',
+                            style: TextStyle(
+                                color: AppColors.textSecondary, fontSize: 16),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: items.length,
+                      itemBuilder: (context, index) {
+                        final item = items[index];
 
-              final service = FileImportService();
-              final newTxs = await service.importTransactions(
-                  context, matchingAccount.id,
-                  isBank: isBank);
+                        if (item is String) {
+                          return Padding(
+                            padding: const EdgeInsets.only(
+                                top: 16.0, bottom: 8.0, right: 8.0),
+                            child: Text(
+                              item,
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                          );
+                        }
 
-              if (newTxs != null && newTxs.isNotEmpty) {
-                if (context.mounted) {
-                  try {
-                    int duplicates = 0;
-                    if (isBank) {
-                      duplicates = await repo.addBulkBankTransactions(
-                          newTxs.cast<BankTransactionModel>());
-                    } else {
-                      duplicates = await repo.addBulkCcTransactions(
-                          newTxs.cast<CcTransactionModel>());
+                        final tx = item as BaseTransaction;
+                        final account = repo.getAccountById(tx.accountId);
+
+                        String title = 'Unknown';
+                        double displayAmount = 0.0;
+                        bool isExpense = false;
+                        IconData catIcon = Icons.category;
+                        Color catColor = AppColors.primary;
+                        String? catName;
+
+                        if (tx.appCategoryId != null) {
+                          final cat = repo.getCategoryById(tx.appCategoryId!);
+                          if (cat != null) {
+                            catIcon = cat.iconData;
+                            catColor = cat.color;
+                            catName = cat.name;
+                          }
+                        }
+
+                        if (tx is BankTransactionModel) {
+                          title = tx.description;
+                          if (tx.expense != null) {
+                            displayAmount = tx.expense!;
+                            isExpense = true;
+                          } else if (tx.income != null) {
+                            displayAmount = tx.income!;
+                            isExpense = false;
+                          }
+                          catName ??= tx.category;
+                        } else if (tx is CcTransactionModel) {
+                          title = tx.businessName;
+                          displayAmount = tx.amount ?? 0.0;
+                          isExpense = true;
+                          catName ??= tx.category;
+                        }
+
+                        Widget leadingIcon = Icon(catIcon, color: catColor);
+
+                        String sourceText = "Unknown";
+                        if (tx is BankTransactionModel) {
+                          sourceText = "Bank Account";
+                        } else if (tx is CcTransactionModel) {
+                          sourceText =
+                              tx.cardDigits ?? account?.name ?? "Credit Card";
+                        }
+
+                        String dateText =
+                            DateFormat("dd/MM/yyyy").format(tx.date);
+                        String subtitleText = '$dateText • $sourceText';
+                        if (catName != null) {
+                          subtitleText += ' • $catName';
+                        }
+
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 16),
+                          child: ListTile(
+                            horizontalTitleGap: 24,
+                            leading: leadingIcon,
+                            title: Text(
+                              title,
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                  color: AppColors.textPrimary),
+                            ),
+                            subtitle: Padding(
+                              padding: const EdgeInsets.only(top: 4.0),
+                              child: Text(
+                                subtitleText,
+                                style: const TextStyle(
+                                    fontSize: 13,
+                                    color: AppColors.textSecondary),
+                              ),
+                            ),
+                            trailing: Text(
+                              '${isExpense ? "-" : "+"}${currencyFormatter.format(displayAmount.abs())}',
+                              textDirection: TextDirection.ltr,
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                                color: isExpense
+                                    ? AppColors.expenseRed
+                                    : AppColors.primary,
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+        floatingActionButton: PopupMenuButton<String>(
+          onSelected: (value) async {
+            final isBank = value == 'bank';
+            final matchingAccount = repo.accounts.firstWhere(
+              (acc) => isBank ? !acc.isDebt : acc.isDebt,
+              orElse: () => repo.accounts.first,
+            );
+
+            final service = FileImportService();
+            final newTxs = await service.importTransactions(
+                context, matchingAccount.id,
+                isBank: isBank);
+
+            if (newTxs != null && newTxs.isNotEmpty) {
+              if (context.mounted) {
+                try {
+                  int duplicates = 0;
+                  if (isBank) {
+                    duplicates = await repo.addBulkBankTransactions(
+                        newTxs.cast<BankTransactionModel>());
+                  } else {
+                    duplicates = await repo.addBulkCcTransactions(
+                        newTxs.cast<CcTransactionModel>());
+                  }
+                  if (context.mounted) {
+                    int added = newTxs.length - duplicates;
+                    String msg = 'Imported $added transactions successfully!';
+                    if (duplicates > 0) {
+                      msg += ' ($duplicates duplicates skipped)';
                     }
-                    if (context.mounted) {
-                      int added = newTxs.length - duplicates;
-                      String msg = 'Imported $added transactions successfully!';
-                      if (duplicates > 0) {
-                        msg += ' ($duplicates duplicates skipped)';
-                      }
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(msg)),
-                      );
-                    }
-                  } catch (e) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                            backgroundColor: Colors.red,
-                            content: Text(
-                                'Error saving to database: $e\nPlease restart the app.')),
-                      );
-                    }
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(msg)),
+                    );
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                          backgroundColor: Colors.red,
+                          content: Text(
+                              'Error saving to database: $e\nPlease restart the app.')),
+                    );
                   }
                 }
               }
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: 'bank',
-                child: Text('Import Bank File'),
-              ),
-              const PopupMenuItem(
-                value: 'cc',
-                child: Text('Import Credit Card File'),
-              ),
-            ],
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              children: [
-                TextField(
-                  decoration: const InputDecoration(
-                    hintText: 'Search transactions by description...',
-                    prefixIcon:
-                        Icon(Icons.search, color: AppColors.textSecondary),
-                  ),
-                  onChanged: (val) => setState(() => _searchQuery = val),
-                ),
-                const SizedBox(height: 12),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      _filterChip('ALL', 'All Activity'),
-                      const SizedBox(width: 8),
-                      _filterChip('BANK', 'Bank Accounts'),
-                      const SizedBox(width: 8),
-                      _filterChip('CREDIT_CARD', 'Credit Cards'),
-                    ],
-                  ),
-                ),
-              ],
+            }
+          },
+          itemBuilder: (context) => [
+            const PopupMenuItem(
+              value: 'bank',
+              child: Text('Import Bank File'),
             ),
+            const PopupMenuItem(
+              value: 'cc',
+              child: Text('Import Credit Card File'),
+            ),
+          ],
+          child: const FloatingActionButton(
+            onPressed: null,
+            backgroundColor: AppColors.accentPurple,
+            child: Icon(Icons.upload_file, color: Colors.white),
           ),
-          Expanded(
-            child: filteredTransactions.isEmpty
-                ? const Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: const [
-                        Icon(Icons.search_off,
-                            size: 48, color: AppColors.textSecondary),
-                        SizedBox(height: 12),
-                        Text(
-                          'No transactions found',
-                          style: TextStyle(
-                              color: AppColors.textSecondary, fontSize: 16),
-                        ),
-                      ],
-                    ),
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemCount: filteredTransactions.length,
-                    itemBuilder: (context, index) {
-                      final tx = filteredTransactions[index];
-                      final account = repo.getAccountById(tx.accountId);
-
-                      String title = 'Unknown';
-                      String subtitleExtra = '';
-                      double displayAmount = 0.0;
-                      bool isExpense = false;
-
-                      if (tx is BankTransactionModel) {
-                        title = tx.description;
-                        if (tx.expense != null) {
-                          displayAmount = tx.expense!;
-                          isExpense = true;
-                        } else if (tx.income != null) {
-                          displayAmount = tx.income!;
-                          isExpense = false;
-                        }
-                        if (tx.appCategoryId != null) {
-                          final cat = repo.getCategoryById(tx.appCategoryId!);
-                          subtitleExtra = ' • ${cat?.name ?? tx.category}';
-                        } else if (tx.category != null) {
-                          subtitleExtra = ' • ${tx.category}';
-                        }
-                      } else if (tx is CcTransactionModel) {
-                        title = tx.businessName;
-                        displayAmount = tx.amount ?? 0.0;
-                        isExpense = true; // Assume CC amounts are expenses
-                        if (tx.appCategoryId != null) {
-                          final cat = repo.getCategoryById(tx.appCategoryId!);
-                          subtitleExtra = ' • ${cat?.name ?? tx.category}';
-                        } else if (tx.category != null) {
-                          subtitleExtra = ' • ${tx.category}';
-                        }
-                      }
-
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 10),
-                        child: ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor:
-                                account?.themeColor.withOpacity(0.2) ??
-                                    AppColors.surfaceLight,
-                            child: Icon(
-                                account?.iconData ?? Icons.account_balance,
-                                color:
-                                    account?.themeColor ?? AppColors.primary),
-                          ),
-                          title: Text(
-                            title,
-                            style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.textPrimary),
-                          ),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const SizedBox(height: 4),
-                              Text(
-                                'Date: ${DateFormat("MMM dd, yyyy").format(tx.date)}',
-                                style: const TextStyle(
-                                    fontSize: 12,
-                                    color: AppColors.textSecondary),
-                              ),
-                              Text(
-                                'Source: ${account?.name ?? "Unknown"}',
-                                style: const TextStyle(
-                                    fontSize: 12,
-                                    color: AppColors.textSecondary),
-                              ),
-                              if (subtitleExtra.isNotEmpty)
-                                Text(
-                                  'Category:${subtitleExtra.replaceFirst(' • ', ' ')}',
-                                  style: const TextStyle(
-                                      fontSize: 12,
-                                      color: AppColors.textSecondary),
-                                ),
-                            ],
-                          ),
-                          isThreeLine: true,
-                          trailing: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text(
-                                '${isExpense ? "-" : "+"}${currencyFormatter.format(displayAmount)}',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                  color: isExpense
-                                      ? AppColors.expenseRed
-                                      : AppColors.primary,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: (isExpense
-                                          ? AppColors.expenseRed
-                                          : AppColors.primary)
-                                      .withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  isExpense ? 'EXPENSE' : 'INCOME',
-                                  style: TextStyle(
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.bold,
-                                    color: isExpense
-                                        ? AppColors.expenseRed
-                                        : AppColors.primary,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -326,6 +347,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   Widget _filterChip(String typeKey, String label) {
     final isSelected = _filterType == typeKey;
     return ChoiceChip(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       label: Text(label),
       selected: isSelected,
       selectedColor: AppColors.primary,

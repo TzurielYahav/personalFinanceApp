@@ -11,7 +11,7 @@ class AccountsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final repo = Provider.of<FinanceRepository>(context);
-    final formatter = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
+    final formatter = NumberFormat.currency(symbol: '₪', decimalDigits: 2);
 
     return Scaffold(
       appBar: AppBar(

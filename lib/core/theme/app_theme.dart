@@ -1,32 +1,31 @@
 import 'package:flutter/material.dart';
 
 class AppColors {
-  static const Color background = Color(0xFF0F172A); // Dark slate
-  static const Color surface = Color(0xFF1E293B);    // Slate card background
-  static const Color surfaceLight = Color(0xFF334155);
+  static const Color background = Colors.white; 
+  static const Color surface = Color(0xFFF8FAFC);    // Slate 50
+  static const Color surfaceLight = Color(0xFFF1F5F9); // Slate 100
 
   static const Color primary = Color(0xFF10B981);    // Emerald green (Income / Cash)
   static const Color accentBlue = Color(0xFF3B82F6); // Sapphire blue (Checking/Bank)
-  static const Color accentPurple = Color(0xFF8B5CF6); // Credit cards
+  static const Color accentPurple = Color(0xFF6366F1); // Blueish Purple (Credit cards)
   static const Color expenseRed = Color(0xFFEF4444);  // Coral Red (Expenses)
   static const Color warningOrange = Color(0xFFF59E0B); // Budget alerts
 
-  static const Color textPrimary = Color(0xFFF8FAFC);
-  static const Color textSecondary = Color(0xFF94A3B8);
-  static const Color border = Color(0xFF334155);
+  static const Color textPrimary = Color(0xFF0F172A); // Dark slate
+  static const Color textSecondary = Color(0xFF64748B); // Slate 500
+  static const Color border = Color(0xFFE2E8F0); // Slate 200
 }
 
 class AppTheme {
-  static ThemeData get darkTheme {
+  static ThemeData get lightTheme { 
     return ThemeData(
       useMaterial3: true,
-      brightness: Brightness.dark,
+      brightness: Brightness.light,
       scaffoldBackgroundColor: AppColors.background,
-      colorScheme: const ColorScheme.dark(
+      colorScheme: const ColorScheme.light(
         primary: AppColors.primary,
-        secondary: AppColors.accentBlue,
+        secondary: AppColors.accentPurple,
         surface: AppColors.surface,
-        background: AppColors.background,
         error: AppColors.expenseRed,
       ),
       cardTheme: CardThemeData(
@@ -46,6 +45,7 @@ class AppTheme {
           fontSize: 22,
           fontWeight: FontWeight.bold,
         ),
+        iconTheme: IconThemeData(color: AppColors.textPrimary),
       ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         backgroundColor: AppColors.surface,
